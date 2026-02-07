@@ -4,7 +4,21 @@ import { AUDIO } from './audio.js';
 
 let canvas, ctx;
 const imageCache = {};
+
+// Helper: Smooth Linear Interpolation
 const lerp = (start, end, amt) => (1 - amt) * start + amt * end;
+
+// Helper: Color Lerp (Hex -> Hex)
+const lerpColorHex = (a, b, amount) => {
+    const ah = parseInt(a.replace(/#/g, ''), 16),
+          ar = ah >> 16, ag = ah >> 8 & 0xff, ab = ah & 0xff,
+          bh = parseInt(b.replace(/#/g, ''), 16),
+          br = bh >> 16, bg = bh >> 8 & 0xff, bb = bh & 0xff,
+          rr = ar + amount * (br - ar),
+          rg = ag + amount * (bg - ag),
+          rb = ab + amount * (bb - ab);
+    return '#' + ((1 << 24) + (rr << 16) + (rg << 8) + (rb | 0)).toString(16).slice(1);
+};
 
 // --- UI REFERENCES ---
 const uiTimeIcon = document.getElementById('ui-time-icon');
@@ -24,9 +38,9 @@ const groundState = {
 // Atmospheric State
 let lightningFlash = 0;
 let cycleTimer = 0; 
-let timeOfDay = 0.5; 
+let timeOfDay = 0.5; // 0.0 to 1.0
 let lightBeams = []; 
-let auroraOpacity = 0; // For Aurora Borealis transition
+let auroraOpacity = 0; 
 
 export function initRenderer() {
     canvas = document.getElementById('gameCanvas');
@@ -43,13 +57,15 @@ export function initRenderer() {
         });
     }
 
-    // Init Light Beams
-    for(let i=0; i<5; i++) {
+    // Init Light Beams (God Rays)
+    // We create them WIDE and TALL so they cover the screen
+    for(let i=0; i<6; i++) {
         lightBeams.push({
             x: Math.random() * window.innerWidth,
-            width: 50 + Math.random() * 100,
-            speed: 0.2 + Math.random() * 0.3,
-            alpha: 0
+            width: 150 + Math.random() * 200,
+            tilt: (Math.random() * 100) - 50, // Slight Angle
+            speed: 0.05 + Math.random() * 0.05, // Slow movement
+            alphaPhase: Math.random() * Math.PI // Random pulse start
         });
     }
 
@@ -96,10 +112,10 @@ function updatePhysics(time) {
     STATE.physics.speed = lerp(STATE.physics.speed, targetConfig.speed || 0.01, smoothFactor);
     STATE.physics.force = lerp(STATE.physics.force, targetConfig.force || 0.05, smoothFactor);
 
-    // 2. Wind Logic
-    const windCycle = Math.sin(time * 0.001); 
-    const windNoise = Math.sin(time * 0.002) * 0.5;
-    STATE.physics.direction = (windCycle + windNoise) * 1.0; 
+    // 2. Wind Logic (Natural Gusts)
+    const windCycle = Math.sin(time * 0.0005); 
+    const gust = Math.sin(time * 0.003) + Math.cos(time * 0.01); 
+    STATE.physics.direction = (windCycle + (gust * 0.3)); 
     STATE.physics.accumulator += STATE.physics.speed;
 
     // 3. Ground Accumulation
@@ -120,27 +136,28 @@ function updatePhysics(time) {
     if (targetConfig.aurora) auroraOpacity = lerp(auroraOpacity, 0.6, 0.01);
     else auroraOpacity = lerp(auroraOpacity, 0, 0.01);
 
-    // 6. Day/Night Cycle
-    cycleTimer += 1;
+    // 6. Day/Night Cycle (Even Slower)
+    cycleTimer += 0.05; // Was 0.1, now 0.05 for extra smoothness
     timeOfDay = (cycleTimer % CONFIG.CYCLE_DURATION) / CONFIG.CYCLE_DURATION;
     const isNight = timeOfDay > 0.75 || timeOfDay < 0.25;
 
-    // 7. Audio
+    // 7. Update Beams (God Rays)
+    lightBeams.forEach(b => {
+        // Move slowly with wind
+        b.x += b.speed * (STATE.physics.direction > 0 ? 1 : -1);
+        
+        // Wrap
+        if(b.x > canvas.width + 200) b.x = -200;
+        if(b.x < -200) b.x = canvas.width + 200;
+
+        // Pulse
+        b.alphaPhase += 0.01;
+    });
+
+    // 8. Audio
     AUDIO.update(STATE.currentWeather || 'sunny', isNight);
 
-    // 8. Light Beams
-    if (isNight) {
-        lightBeams.forEach(b => {
-            b.x += b.speed;
-            if(b.x > canvas.width + 100) b.x = -100;
-            b.alpha = 0.1 + Math.sin(time * 0.001 + b.x) * 0.05;
-        });
-    }
-
-    // 9. UI Updates
     updateUI(isNight, targetConfig);
-
-    // 10. Particles
     updateParticles(targetConfig);
 }
 
@@ -163,7 +180,6 @@ function updateUI(isNight, targetConfig) {
     }
 
     if (uiWindSpeed && uiWindArrow) {
-        // Adjust display number for readability
         const kmh = Math.floor(Math.abs(STATE.physics.direction * STATE.physics.force) * 120);
         uiWindSpeed.innerText = kmh;
         const arrowRot = STATE.physics.direction > 0 ? 90 : 270;
@@ -179,28 +195,24 @@ function updateParticles(config) {
     const P = STATE.physics;
     
     // --- SPAWNING LOGIC ---
-    // Cap particles at 2000 to prevent crash during Hurricane/Blizzard
     if(STATE.rainDrops.length < 2000) {
         if(config.rainRate > 0) for(let i=0; i<config.rainRate; i++) spawnParticle('rain');
         if(config.snowRate > 0) for(let i=0; i<config.snowRate; i++) spawnParticle('snow');
         if(config.hailRate > 0) for(let i=0; i<config.hailRate; i++) spawnParticle('hail');
         if(config.ashRate > 0)  for(let i=0; i<config.ashRate; i++) spawnParticle('ash');
         
-        // Debris (Probabilistic)
-        if(config.debris > 0) {
-            // If debris is 1.0 (Hurricane), spawn 1 per frame. If 0.2, spawn rarely.
-            if(Math.random() < config.debris) spawnParticle('debris');
-        }
-
-        // Meteors
+        if(config.debris > 0 && Math.random() < config.debris) spawnParticle('debris');
         if(config.meteorRate > 0 && Math.random() < 0.05) spawnParticle('meteor');
+
+        // Pollen
+        if (!config.rainRate && !config.snowRate && !config.ashRate) {
+            if (Math.random() < 0.1) spawnParticle('pollen');
+        }
     }
 
     // --- MOVEMENT LOGIC ---
     for(let i=STATE.rainDrops.length-1; i>=0; i--) {
         const p = STATE.rainDrops[i];
-        
-        // Wind Effect calculation
         const windX = (P.force * P.direction); 
 
         if (p.type === 'rain') {
@@ -218,18 +230,20 @@ function updateParticles(config) {
         else if (p.type === 'debris') {
             p.x += windX * 20; 
             p.y += (Math.sin(p.x * 0.1) * 3) + 2; 
-            p.r += 0.1; // Rotation
+            p.r += 0.1; 
         }
         else if (p.type === 'meteor') {
-            p.x -= 15; // Fast movement left
-            p.y += 10; // Fast movement down
+            p.x -= 15; 
+            p.y += 10; 
+        }
+        else if (p.type === 'pollen') {
+            p.x += windX * 2 + Math.sin(p.y * 0.02);
+            p.y += 0.5 + Math.cos(p.x * 0.02) * 0.5;
+            p.opacity -= 0.002; 
         }
 
-        // --- DELETION LOGIC (More permissive) ---
-        // Allow particles to go way off screen before killing them
-        // This fixes the "Missing Particles" bug during high wind
         const buffer = 300; 
-        if(p.y > canvas.height + buffer || p.x > canvas.width + buffer || p.x < -buffer) {
+        if(p.y > canvas.height + buffer || p.x > canvas.width + buffer || p.x < -buffer || (p.type === 'pollen' && p.opacity <= 0)) {
             STATE.rainDrops.splice(i, 1);
         }
     }
@@ -237,54 +251,64 @@ function updateParticles(config) {
 
 function spawnParticle(type) {
     const P = STATE.physics;
-    
-    // Spawn Logic:
-    // If wind is blowing right (+), spawn left (-).
-    // If wind is blowing left (-), spawn right (+).
-    // We create a wide "Sky Bar" above the screen.
-    
     const windDir = P.direction > 0 ? -1 : 1; 
-    // Shift spawn point based on wind strength so they blow INTO view
     const windOffset = (P.force * 500) * windDir; 
 
-    let startX = Math.random() * (canvas.width + 400) - 200; // Base spread
-    startX += windOffset; // Apply wind bias
+    let startX = Math.random() * (canvas.width + 400) - 200; 
+    startX += windOffset; 
 
     if (type === 'meteor') {
         STATE.rainDrops.push({
             type: 'meteor',
-            x: Math.random() * canvas.width + 200, // Spawn right side
+            x: Math.random() * canvas.width + 200, 
             y: -200,
             z: Math.random(),
             len: 100 + Math.random() * 100
         });
-    } else {
+    } 
+    else if (type === 'pollen') {
+        STATE.rainDrops.push({
+            type: 'pollen',
+            x: Math.random() * canvas.width, 
+            y: Math.random() * canvas.height, 
+            z: Math.random(),
+            opacity: 0.0, 
+            targetOpacity: 0.4 + Math.random() * 0.4
+        });
+    }
+    else {
         STATE.rainDrops.push({
             type: type,
             x: startX, 
             y: -50, 
             z: Math.random(),
-            r: Math.random() * Math.PI // Rotation for debris
+            r: Math.random() * Math.PI 
         });
     }
 }
 
 function draw(time) {
     drawBackground();
+    
+    // Draw Beams BEHIND the plants so plants block them slightly?
+    // Actually, God Rays usually overlay everything.
+    // We draw them here (after BG, before plants) for "Atmospheric Distance"
+    drawBeams();
 
     const P = STATE.physics;
-    const baseLean = P.force * P.direction * 0.8; 
-    const noise = Math.cos(P.accumulator) + Math.sin(P.accumulator * 2.7);
-    const globalWind = baseLean + (noise * 0.1 * P.force);
+    const baseLean = P.force * P.direction * 1.2; 
+    const flutter = Math.cos(time * 0.005) * (0.2 * P.force);
 
     // GRASS
     ctx.lineWidth = 2;
     STATE.grassBlades.forEach(blade => {
-        const localWind = globalWind * (0.5 + blade.z * 0.3);
-        if (groundState.snowLevel > 0.1) ctx.strokeStyle = lerpColor(blade.color, '#ffffff', groundState.snowLevel * 0.8);
-        else ctx.strokeStyle = blade.color;
-        
-        drawBlade(blade, localWind);
+        const grassWind = baseLean + (flutter * 1.5) + (blade.z * 0.1);
+        if (groundState.snowLevel > 0.01) {
+            ctx.strokeStyle = lerpColorHex(blade.color, '#ffffff', groundState.snowLevel * 0.9);
+        } else {
+            ctx.strokeStyle = blade.color;
+        }
+        drawBlade(blade, grassWind);
     });
 
     // PLANTS
@@ -293,8 +317,10 @@ function draw(time) {
     
     STATE.plants.sort((a,b) => a.y - b.y).forEach(p => {
         let age = now - (p.server_time || 0);
-        const plantTurbulence = Math.sin(P.accumulator + (p.x * 0.005)) * (0.08 * P.force);
-        const rotation = baseLean + plantTurbulence;
+        
+        const individualSway = Math.sin(now * 0.001 + p.x) * 0.05; 
+        const windTurbulence = Math.sin(now * 0.003 + p.y) * (0.15 * P.force);
+        let rotation = baseLean + individualSway + windTurbulence;
 
         ctx.save();
         ctx.translate(p.x, p.y);
@@ -327,7 +353,6 @@ function draw(time) {
     if(STATE.rainDrops.length > 0) {
         STATE.rainDrops.forEach(d => { 
             ctx.beginPath(); 
-            
             if (d.type === 'rain') {
                 ctx.lineWidth = 1 + d.z;
                 ctx.strokeStyle = `rgba(200, 230, 255, ${0.4 + d.z*0.3})`;
@@ -352,7 +377,6 @@ function draw(time) {
                 ctx.fill();
             }
             else if (d.type === 'debris') {
-                // Tumbling squares
                 ctx.save();
                 ctx.translate(d.x, d.y);
                 ctx.rotate(d.r);
@@ -361,7 +385,6 @@ function draw(time) {
                 ctx.restore();
             }
             else if (d.type === 'meteor') {
-                // Glowing Trail
                 const grad = ctx.createLinearGradient(d.x, d.y, d.x + 100, d.y - 60);
                 grad.addColorStop(0, 'rgba(255, 255, 200, 1)');
                 grad.addColorStop(1, 'rgba(255, 255, 200, 0)');
@@ -371,48 +394,149 @@ function draw(time) {
                 ctx.lineTo(d.x + 100, d.y - 60);
                 ctx.stroke();
             }
+            else if (d.type === 'pollen') {
+                if (d.opacity < d.targetOpacity) d.opacity += 0.01;
+                ctx.fillStyle = `rgba(255, 255, 200, ${d.opacity})`;
+                ctx.arc(d.x, d.y, 1 + d.z, 0, Math.PI*2);
+                ctx.fill();
+            }
         });
     }
 
-    // LIGHTING & ATMOSPHERE
-    drawLightingOverlay();
-
-    // Name Tags
+    drawOverlay();
     if(STATE.hoveredPlant) drawNameTag(STATE.hoveredPlant);
 }
 
+// --- SMOOTH BACKGROUND TRANSITION (FIXED) ---
 function drawBackground() {
-    let topColor, botColor;
     const C = CONFIG.SKY_COLORS;
-    
-    // Determine Base Sky Color
-    if (timeOfDay < 0.25) { topColor = C.dawn[0]; botColor = C.dawn[1]; } 
-    else if (timeOfDay < 0.75) { topColor = C.day[0]; botColor = C.day[1]; } 
-    else if (timeOfDay < 0.90) { topColor = C.dusk[0]; botColor = C.dusk[1]; } 
-    else { topColor = C.night[0]; botColor = C.night[1]; }
+    let set1, set2, t;
 
-    // Apply Weather Tints (Dust Storm / Volcanic Ash)
-    const targetConfig = CONFIG.WEATHER_TYPES[STATE.currentWeather];
-    if(targetConfig && targetConfig.tint) {
-        // Blend sky with tint
-        ctx.fillStyle = targetConfig.tint;
-        ctx.fillRect(0,0,canvas.width, canvas.height);
-        ctx.globalCompositeOperation = 'multiply'; // Blend it
+    // We define 4 distinct phases with NO GAPS.
+    // 0.0 - 0.25: Night -> Dawn
+    // 0.25 - 0.50: Dawn -> Day
+    // 0.50 - 0.75: Day -> Dusk
+    // 0.75 - 1.00: Dusk -> Night
+
+    if (timeOfDay < 0.25) {
+        set1 = C.night; set2 = C.dawn;
+        t = timeOfDay / 0.25; 
+    } 
+    else if (timeOfDay < 0.50) {
+        set1 = C.dawn; set2 = C.day;
+        t = (timeOfDay - 0.25) / 0.25;
+    } 
+    else if (timeOfDay < 0.75) {
+        set1 = C.day; set2 = C.dusk;
+        t = (timeOfDay - 0.50) / 0.25;
+    } 
+    else {
+        set1 = C.dusk; set2 = C.night;
+        t = (timeOfDay - 0.75) / 0.25;
     }
 
+    // Blend Colors
+    const topColor = lerpColorHex(set1[0], set2[0], t);
+    const botColor = lerpColorHex(set1[1], set2[1], t);
+
+    // Draw Sky
     const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
     grad.addColorStop(0, topColor);
     grad.addColorStop(1, botColor);
 
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Reset Composite
-    ctx.globalCompositeOperation = 'source-over';
 
-    // AURORA BOREALIS
+    // Tint (Weather)
+    const targetConfig = CONFIG.WEATHER_TYPES[STATE.currentWeather];
+    if(targetConfig && targetConfig.tint) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'multiply'; 
+        ctx.fillStyle = targetConfig.tint;
+        ctx.fillRect(0,0,canvas.width, canvas.height);
+        ctx.restore();
+    }
+
     if(auroraOpacity > 0.01) {
         drawAurora(auroraOpacity);
+    }
+}
+
+// --- VISIBLE LIGHT BEAMS ---
+function drawBeams() {
+    const isNight = timeOfDay > 0.75 || timeOfDay < 0.25;
+    let colorStart, colorEnd;
+
+    // Define Colors based on time
+    if (isNight) {
+        // Moon Beams: Cool, Blueish, Faint
+        colorStart = "rgba(200, 220, 255, 0.15)";
+        colorEnd = "rgba(200, 220, 255, 0)";
+    } else {
+        // Sun Rays: Warm, Yellowish, Visible
+        // If cloudy, make them whiter/stronger to pierce clouds
+        const w = STATE.currentWeather;
+        if(w === 'cloudy' || w === 'rain') {
+            colorStart = "rgba(255, 255, 255, 0.25)";
+        } else {
+            colorStart = "rgba(255, 250, 210, 0.2)"; // Sunny gold
+        }
+        colorEnd = "rgba(255, 250, 210, 0)";
+    }
+
+    ctx.save();
+    // 'screen' or 'soft-light' blends nicely with sky without washing out
+    ctx.globalCompositeOperation = 'overlay'; 
+
+    lightBeams.forEach(b => {
+        // Calculate dynamic alpha pulsing
+        const pulse = 0.5 + Math.sin(b.alphaPhase) * 0.5; // 0.0 to 1.0
+        
+        // Setup Gradient for ONE beam
+        // It starts high and fades as it goes down
+        const grad = ctx.createLinearGradient(b.x, -100, b.x + b.tilt, canvas.height);
+        
+        // We inject the Alpha into the color string manually for the pulse effect
+        // NOTE: simplistic replacement for performance, assumes rgba format above
+        const c1 = colorStart.replace(/[\d.]+\)$/g, `${0.3 * pulse})`); 
+        
+        grad.addColorStop(0, c1);
+        grad.addColorStop(1, colorEnd);
+
+        ctx.fillStyle = grad;
+        
+        // Draw the beam (Trapezoid shape for "spreading" light)
+        ctx.beginPath();
+        ctx.moveTo(b.x, -100);
+        ctx.lineTo(b.x + b.width, -100);
+        ctx.lineTo(b.x + b.width + b.tilt, canvas.height);
+        ctx.lineTo(b.x + b.tilt, canvas.height);
+        ctx.fill();
+    });
+
+    ctx.restore();
+}
+
+function drawOverlay() {
+    let darkness = 0;
+    const targetConfig = CONFIG.WEATHER_TYPES[STATE.currentWeather];
+    const isDarkWeather = targetConfig && targetConfig.dark;
+
+    // Darkness based on Time (Peak night at 0.0 and 1.0)
+    // 0.25 (Dawn) -> 0.75 (Dusk) = Light
+    if (timeOfDay < 0.25) darkness = 0.6 - (timeOfDay/0.25)*0.6; 
+    else if (timeOfDay > 0.75) darkness = (timeOfDay-0.75)/0.25 * 0.6; 
+    
+    if(isDarkWeather) darkness = Math.max(darkness, 0.4);
+
+    if (darkness > 0.01) {
+        ctx.fillStyle = `rgba(5, 10, 30, ${darkness})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    if (lightningFlash > 0.01) {
+        ctx.fillStyle = `rgba(255, 255, 255, ${lightningFlash})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 }
 
@@ -425,7 +549,6 @@ function drawAurora(opacity) {
     grad.addColorStop(1, `rgba(0, 255, 100, ${opacity * 0.5})`);
     
     ctx.fillStyle = grad;
-    // Wavy shape
     ctx.beginPath();
     ctx.moveTo(0, 0);
     for(let x=0; x<=canvas.width; x+=50) {
@@ -434,50 +557,6 @@ function drawAurora(opacity) {
     ctx.lineTo(canvas.width, 0);
     ctx.fill();
     ctx.restore();
-}
-
-function drawLightingOverlay() {
-    let darkness = 0;
-    
-    // Calculate Darkness
-    const targetConfig = CONFIG.WEATHER_TYPES[STATE.currentWeather];
-    const isDarkWeather = targetConfig && targetConfig.dark;
-
-    if (timeOfDay < 0.2) darkness = 0.7 - (timeOfDay/0.2)*0.7; 
-    else if (timeOfDay > 0.8) darkness = (timeOfDay-0.8)/0.2 * 0.7; 
-    else if (timeOfDay < 0.25 || timeOfDay > 0.75) darkness = 0.3; 
-    else darkness = 0; 
-
-    if(isDarkWeather) darkness = Math.max(darkness, 0.4);
-
-    if (darkness > 0.2) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'overlay'; 
-        lightBeams.forEach(b => {
-            const grad = ctx.createLinearGradient(b.x, 0, b.x + 100, canvas.height);
-            grad.addColorStop(0, `rgba(200, 200, 255, 0)`);
-            grad.addColorStop(0.5, `rgba(200, 200, 255, ${b.alpha * 0.5})`);
-            grad.addColorStop(1, `rgba(200, 200, 255, 0)`);
-            ctx.fillStyle = grad;
-            ctx.fillRect(b.x - 50, 0, b.width + 100, canvas.height);
-        });
-        ctx.restore();
-    }
-
-    if (darkness > 0) {
-        ctx.fillStyle = `rgba(5, 10, 30, ${darkness})`;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
-
-    if (lightningFlash > 0.01) {
-        ctx.fillStyle = `rgba(255, 255, 255, ${lightningFlash})`;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
-}
-
-function lerpColor(a, b, amount) {
-    if (amount > 0.5) return b;
-    return a;
 }
 
 function drawBlade(blade, windRad) {
