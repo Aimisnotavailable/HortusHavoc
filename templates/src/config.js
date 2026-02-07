@@ -1,5 +1,5 @@
 export const CONFIG = {
-    API_URL: 'http://localhost:5000/api', 
+    API_URL: 'https://drawagarden.onrender.com/api', 
     POLL_INTERVAL: 2000,
     GRASS_COUNT: 8000,
     CANVAS_SIZE: 200,
