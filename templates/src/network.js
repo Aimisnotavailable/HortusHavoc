@@ -24,11 +24,13 @@ export function pollUpdates() {
         .then(res => res.json())
         .then(data => {
             // A. Sync Plants
+            console.log("Polling updates... Received:", data);
             if(data.plants && data.plants.length > 0) {
                 const existingIds = new Set(STATE.plants.map(p => p.id));
                 const uniqueNew = data.plants.filter(p => !existingIds.has(p.id));
                 
-                if (uniqueNew.length > 0) {                    STATE.plants.push(...uniqueNew);
+                if (uniqueNew.length > 0) {
+                    STATE.plants.push(...uniqueNew);
                     // OPTIMIZATION: Sort ONCE when data arrives, not every frame
                     STATE.plants.sort((a,b) => a.y - b.y);
                     

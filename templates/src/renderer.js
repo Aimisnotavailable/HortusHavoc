@@ -17,8 +17,9 @@ const visualState = {
 // --- CACHE & HELPERS ---
 const imageCache = {};
 const lerp = (start, end, amt) => (1 - amt) * start + amt * end;
+
+// Robust Color Interpolation (Hex)
 const lerpColorHex = (a, b, amount) => {
-    // Handle short hex like #fff
     let hex = a.replace(/#/g, '');
     if (hex.length === 3) hex = hex.split('').map(c => c+c).join('');
     const ah = parseInt(hex, 16);
@@ -61,18 +62,32 @@ export function initRenderer() {
     if (!canvas) return;
     ctx = canvas.getContext('2d', { alpha: false });
 
+    // MOBILE FIX: Track last width to prevent redraw on vertical scroll (URL bar)
+    let lastWidth = window.innerWidth;
+
     const resize = () => {
+        const widthChanged = Math.abs(window.innerWidth - lastWidth) > 50;
+        const firstRun = !width;
+
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
         width = canvas.width;
         height = canvas.height;
         ctx.imageSmoothingEnabled = false; 
-        generateGrass(); 
+        
+        if (widthChanged || firstRun) {
+            generateGrass(); 
+            lastWidth = window.innerWidth;
+            
+            // Re-init beams
+            visualState.beams = [];
+            for(let i=0; i<8; i++) spawnBeam(true);
+        }
     };
     window.addEventListener('resize', resize);
     resize(); 
 
-    // Init Entities
+    // Init Puddles
     for(let i=0; i<15; i++) {
         visualState.puddleMap.push({
             x: Math.random() * width,
@@ -82,9 +97,10 @@ export function initRenderer() {
         });
     }
 
-    for(let i=0; i<8; i++) spawnBeam(true); 
-
+    // Audio Init
     window.addEventListener('click', () => { AUDIO.init(); }, { once: true });
+    window.addEventListener('touchstart', () => { AUDIO.init(); }, { once: true });
+    
     requestAnimationFrame(loop);
 }
 
@@ -118,7 +134,8 @@ function spawnBeam(randomStart = false) {
         length: 300 + Math.random() * 300, 
         width: 60 + Math.random() * 100,   
         alphaPhase: Math.random() * Math.PI,
-        speed: 0.5 + Math.random() * 0.5   
+        speed: 0.5 + Math.random() * 0.5,
+        opacity: Math.random() * 0.1 + 0.05
     });
 }
 
@@ -135,7 +152,6 @@ function loop() {
 function updatePhysics(now) {
     const targetConfig = CONFIG.WEATHER_TYPES[STATE.currentWeather] || CONFIG.WEATHER_TYPES['sunny'];
     
-    // Physics
     STATE.physics.speed = lerp(STATE.physics.speed, targetConfig.speed || 0.01, 0.05);
     STATE.physics.force = lerp(STATE.physics.force, targetConfig.force || 0.05, 0.05);
     
@@ -143,38 +159,24 @@ function updatePhysics(now) {
     const gust = Math.sin(now * 0.003) + Math.cos(now * 0.01); 
     STATE.physics.direction = (windCycle + (gust * 0.3)); 
 
-    // Sync Environment
     const targetSnow = STATE.world?.snowLevel || 0;
     const targetPuddle = STATE.world?.puddleLevel || 0;
     visualState.snowLevel = lerp(visualState.snowLevel, targetSnow, 0.01);
     visualState.puddleLevel = lerp(visualState.puddleLevel, targetPuddle, 0.01);
 
-    // Effects
     if (targetConfig.lightning && Math.random() > 0.995) lightningFlash = 1.0;
     if (lightningFlash > 0) lightningFlash -= 0.05;
     auroraOpacity = targetConfig.aurora ? lerp(auroraOpacity, 0.6, 0.01) : lerp(auroraOpacity, 0, 0.01);
 
-    // Time
     const MS_PER_DAY = 24 * 60 * 60 * 1000; 
     const scale = CONFIG.GAME_TIME_SCALE || 10; 
     const gameTimeMs = (now * scale) % MS_PER_DAY;
     timeOfDay = gameTimeMs / MS_PER_DAY; 
     const isNight = timeOfDay > 0.75 || timeOfDay < 0.25;
 
-    // Update Beams
-    for (let i = visualState.beams.length - 1; i >= 0; i--) {
-        const b = visualState.beams[i];
-        b.x -= b.speed; 
-        b.alphaPhase += 0.01;
-        if (b.x < -200) {
-            visualState.beams.splice(i, 1);
-            spawnBeam(false); 
-        }
-    }
-
-    AUDIO.update(STATE.currentWeather || 'sunny', isNight);
-    updateUI(isNight, targetConfig);
     updateParticles(targetConfig);
+    updateUI(isNight, targetConfig);
+    AUDIO.update(STATE.currentWeather || 'sunny', isNight);
 }
 
 function updateUI(isNight, targetConfig) {
@@ -194,7 +196,6 @@ function updateUI(isNight, targetConfig) {
 function updateParticles(config) {
     const P = STATE.physics;
     
-    // Cap particles at 2000
     if(STATE.rainDrops.length < 2000) {
         if(config.rainRate) for(let i=0; i<config.rainRate; i++) spawnParticle('rain');
         if(config.snowRate) for(let i=0; i<config.snowRate; i++) spawnParticle('snow');
@@ -236,6 +237,7 @@ function updateParticles(config) {
 }
 
 function spawnParticle(type) {
+    if (!width || !height) return;
     const P = STATE.physics;
     const windDir = P.direction > 0 ? -1 : 1;
     const windOffset = (P.force * 500) * windDir; 
@@ -254,11 +256,8 @@ function spawnParticle(type) {
 // 3. DRAWING
 // ==========================================
 function draw(now) {
-    // 1. Ground & Puddles (Background)
     drawGround();
     drawPuddles();
-    
-    // 2. Lights behind plants
     drawFiniteBeams();
 
     const P = STATE.physics;
@@ -267,14 +266,13 @@ function draw(now) {
     const flutter = Math.cos(now * 0.005) * (0.2 * P.force);
     const dynamicWind = baseLean + flutter;
 
-    // 3. Grass
+    // Grass
     ctx.lineWidth = 2;
     STATE.grassBlades.forEach(blade => {
         const staticPose = Math.sin(blade.x * 0.1 + blade.y * 0.1) * 0.2;
         const finalLean = (dynamicWind + (blade.z * 0.1)) * (1 - freezeFactor) + (staticPose * freezeFactor);
         
         if (visualState.snowLevel > 0.01) {
-            // FIX: Use pure white for snow tint
             ctx.strokeStyle = lerpColorHex(blade.color, '#ffffff', visualState.snowLevel * 0.9);
         } else {
             ctx.strokeStyle = blade.color;
@@ -282,7 +280,7 @@ function draw(now) {
         drawBlade(blade, finalLean);
     });
 
-    // 4. Plants
+    // Plants
     STATE.hoveredPlant = null;
     STATE.plants.sort((a,b) => a.y - b.y).forEach(p => {
         const age = now - (p.server_time || 0);
@@ -296,44 +294,48 @@ function draw(now) {
         drawPlant(p, finalRot, age);
     });
 
-    // 5. Overlays
     drawSnowCover();
-    drawParticles();
+    drawParticles(); // <--- FIXED: Added this call back!
     drawSplashes();
     drawAtmosphere();
 }
 
 function drawFiniteBeams() {
+    if (!width || !height || width <= 0) return;
+    if (STATE.currentWeather.includes('rain') || STATE.currentWeather.includes('storm')) return;
+
     ctx.save();
-    ctx.globalCompositeOperation = 'lighter'; 
+    ctx.globalCompositeOperation = 'overlay'; 
 
     visualState.beams.forEach(b => {
         const alpha = (Math.sin(b.alphaPhase) * 0.1 + 0.15) * (1.2 - timeOfDay);
         if(alpha <= 0) return;
-        if (!isFinite(b.x) || !isFinite(b.y) || !isFinite(b.length)) return;
 
-        const endX = b.x;
-        const endY = b.y;
-        const startX = b.x + Math.cos(LIGHT_SOURCE_ANGLE - Math.PI/2) * b.length;
-        const startY = b.y + Math.sin(LIGHT_SOURCE_ANGLE - Math.PI/2) * b.length;
+        const tilt = (b.x - width / 2) * 0.8; 
+        const xStart = b.x;
+        const xEnd = b.x + tilt;
 
-        const grad = ctx.createLinearGradient(endX, endY, startX, startY);
-        grad.addColorStop(0, `rgba(255, 255, 220, ${alpha})`); 
-        grad.addColorStop(1, `rgba(255, 255, 220, 0)`);       
+        if (!Number.isFinite(xStart) || !Number.isFinite(xEnd) || !Number.isFinite(height)) return;
+
+        const grad = ctx.createLinearGradient(xStart, 0, xEnd, height);
+        grad.addColorStop(0, `rgba(255, 255, 230, ${b.opacity})`); 
+        grad.addColorStop(1, `rgba(255, 255, 230, 0)`);       
 
         ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.moveTo(endX - b.width/2, endY);
-        ctx.lineTo(endX + b.width/2, endY);
-        ctx.lineTo(startX + b.width/4, startY);
-        ctx.lineTo(startX - b.width/4, startY);
-        ctx.closePath();
+        ctx.moveTo(xStart - b.width/2, 0);
+        ctx.lineTo(xStart + b.width/2, 0);
+        ctx.lineTo(xEnd + b.width*2, height);
+        ctx.lineTo(xEnd - b.width*2, height);
         ctx.fill();
         
-        ctx.fillStyle = `rgba(255, 255, 220, ${alpha * 0.5})`;
-        ctx.beginPath();
-        ctx.ellipse(endX, endY, b.width/2, b.width/4, 0, 0, Math.PI*2);
-        ctx.fill();
+        b.x += b.speed;
+        b.opacity += (Math.random() - 0.5) * 0.01;
+        
+        if (b.x > width + 200 || b.x < -200 || b.opacity <= 0) {
+            b.x = Math.random() * width;
+            b.opacity = Math.random() * 0.1 + 0.05;
+        }
     });
 
     ctx.restore();
@@ -383,8 +385,7 @@ function drawPlant(p, rotation, age) {
 
 function drawLayer(ctx, img, w, h, progress, applySnow) {
     if (progress <= 0.01) return;
-    if (!img.complete || img.naturalWidth === 0) return;
-
+    
     ctx.save();
     ctx.beginPath();
     const visibleH = h * progress;
@@ -395,7 +396,6 @@ function drawLayer(ctx, img, w, h, progress, applySnow) {
 
     if (applySnow) {
         ctx.globalCompositeOperation = 'source-atop';
-        // FIX: Use pure white for snow sticking to plants
         ctx.fillStyle = `rgba(255, 255, 255, ${visualState.snowLevel * 0.9})`;
         ctx.fillRect(-w/2, -h, w, h);
     }
@@ -405,7 +405,6 @@ function drawLayer(ctx, img, w, h, progress, applySnow) {
 
 function drawGround() {
     const baseColor = '#1e361a';
-    // FIX: Pure White Snow (#ffffff) instead of Blue-White (#eef)
     const snowColor = '#ffffff'; 
     ctx.fillStyle = visualState.snowLevel > 0 ? lerpColorHex(baseColor, snowColor, visualState.snowLevel) : baseColor;
     ctx.fillRect(0, 0, width, height);
@@ -416,10 +415,8 @@ function drawPuddles() {
     ctx.save();
     
     visualState.puddleMap.forEach(p => {
-        // FIX: If snowing heavily, turn puddles to Ice (White/Grey)
-        let r=100, g=150, b=200; // Blue Water
+        let r=100, g=150, b=200; 
         if (visualState.snowLevel > 0.2) {
-            // Lerp towards white ice (230, 240, 250)
             const amt = Math.min(1.0, (visualState.snowLevel - 0.2) * 1.5);
             r = lerp(100, 230, amt);
             g = lerp(150, 240, amt);
@@ -439,7 +436,6 @@ function drawPuddles() {
 function drawSnowCover() {
     if(visualState.snowLevel < 0.5) return;
     ctx.save();
-    // Pure white overlay
     ctx.fillStyle = `rgba(255,255,255, ${ (visualState.snowLevel - 0.5) * 0.3 })`;
     ctx.fillRect(0, 0, width, height);
     ctx.restore();
@@ -462,13 +458,10 @@ function drawAtmosphere() {
     const config = CONFIG.WEATHER_TYPES[STATE.currentWeather];
     if (config && config.vis && config.vis < 1.0) {
         const fogAlpha = (1.0 - config.vis) * 0.6;
-        
-        // FIX: Use White Fog for snow/blizzard, Blue Fog for rain/fog
-        let fr=200, fg=220, fb=230; // Blue-ish default
+        let fr=200, fg=220, fb=230; 
         if (STATE.currentWeather.includes('snow') || STATE.currentWeather.includes('blizzard')) {
-            fr=255; fg=255; fb=255; // White fog
+            fr=255; fg=255; fb=255; 
         }
-        
         ctx.fillStyle = `rgba(${fr},${fg},${fb}, ${fogAlpha})`;
         ctx.fillRect(0,0, width, height);
     }
@@ -502,6 +495,7 @@ function drawBlade(b, wind) {
     ctx.stroke();
 }
 
+// --- FIXED: Function was missing in previous paste ---
 function drawParticles() {
     STATE.rainDrops.forEach(p => {
         if(p.type === 'rain') {

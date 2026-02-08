@@ -5,14 +5,14 @@ import random
 import json
 import os
 
-# Get the directory where app.py actually lives
+# 1. SETUP PATHS
+# Get the folder where this app.py is running
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Point to the templates folder relative to this file
-# If 'templates' is INSIDE DrawAGarden, remove the '../'
-template_dir = os.path.join(BASE_DIR, 'templates')
+# Since you moved everything to 'templates', we point both configs there
+TARGET_FOLDER = os.path.join(BASE_DIR, 'templates')
 
-app = Flask(__name__, static_folder=template_dir)
+app = Flask(__name__, static_folder=TARGET_FOLDER, template_folder=TARGET_FOLDER)
 CORS(app)
 
 # --- STATE ---
@@ -21,8 +21,8 @@ GLOBAL_PLANTS = []
 
 # Admin Overrides
 admin_override = {
-    "weather": None,        # If set, locks weather to this type
-    "time_offset": 0        # Shift server time (in hours)
+    "weather": None,
+    "time_offset": 0
 }
 
 WEATHER_TYPES = [
@@ -30,13 +30,11 @@ WEATHER_TYPES = [
     "snow", "blizzard", "hail", "fog", "tornado", "dust_storm", 
     "volcanic_ash", "meteor_shower", "aurora_borealis"
 ]
-
 current_weather = "sunny"
 last_weather_change = 0
 WEATHER_DURATION_SEC = 60
 
 # --- GLOBAL ENVIRONMENT STATE ---
-# 0.0 = Dry/None, 1.0 = Max Saturation
 env_state = {
     "snow_level": 0.0,
     "puddle_level": 0.0
@@ -65,21 +63,18 @@ print(f"Server loaded {len(GLOBAL_PLANTS)} plants from {DB_FILE}")
 def update_weather_logic():
     global current_weather, last_weather_change, env_state
     
-    # 1. Check Admin Override
     if admin_override["weather"]:
         current_weather = admin_override["weather"]
     else:
-        # 2. Normal Random Logic
         now = time.time()
         if now - last_weather_change > WEATHER_DURATION_SEC:
             weights = [0.3] + [0.7 / (len(WEATHER_TYPES)-1)] * (len(WEATHER_TYPES)-1)
             current_weather = random.choices(WEATHER_TYPES, weights=weights, k=1)[0]
             last_weather_change = now
 
-    # 3. Simulate Environment
     w = current_weather
     
-    # Snow Logic
+    # Simple Physics Simulation
     if "snow" in w or "blizzard" in w:
         rate = 0.002 if "blizzard" in w else 0.0005
         env_state["snow_level"] = min(1.0, env_state["snow_level"] + rate)
@@ -88,7 +83,6 @@ def update_weather_logic():
     else:
         env_state["snow_level"] = max(0.0, env_state["snow_level"] - 0.0002)
 
-    # Puddle Logic
     if "rain" in w or "storm" in w:
         rate = 0.005 if "storm" in w else 0.001
         env_state["puddle_level"] = min(1.0, env_state["puddle_level"] + rate)
@@ -96,18 +90,24 @@ def update_weather_logic():
     elif "sunny" in w:
         env_state["puddle_level"] = max(0.0, env_state["puddle_level"] - 0.001)
 
+# --- ROUTES ---
+
 @app.route('/')
 def index():
-    print(app.static_folder)
+    # Serves templates/index.html
     return send_from_directory(app.static_folder, 'index.html')
 
 @app.route('/admin')
 def admin():
+    # Renders templates/admin.html with Jinja2
     return render_template('admin.html', weather_types=WEATHER_TYPES)
 
 @app.route('/<path:path>')
 def serve_static(path):
+    # Serves templates/main.js, templates/style.css, etc.
     return send_from_directory(app.static_folder, path)
+
+# --- API ---
 
 @app.route('/api/plant', methods=['POST'])
 def add_plant():
@@ -156,3 +156,6 @@ def admin_update():
         admin_override['time_offset'] = data['time_offset']
     return jsonify({"status": "ok", "overrides": admin_override})
 
+if __name__ == '__main__':
+    print(f"Serving everything from: {TARGET_FOLDER}")
+    app.run(host='0.0.0.0', port=5000, debug=True)
