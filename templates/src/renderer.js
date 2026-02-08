@@ -40,7 +40,7 @@ const lerpColorHex = (a, b, amount) => {
 const uiElements = {
     icon: document.getElementById('ui-time-icon'),
     text: document.getElementById('ui-time-text'),
-    weather: document.getElementById('ui-weather'),
+    weather: document.getElementById('ui-weather'), // Re-added!
     windSpeed: document.getElementById('ui-wind-speed'),
     windArrow: document.getElementById('ui-wind-arrow'),
     plantCount: document.getElementById('ui-plant-count'),
@@ -63,7 +63,6 @@ export function initRenderer() {
     if (!canvas) return;
     ctx = canvas.getContext('2d', { alpha: false });
 
-    // MOBILE FIX: Track last width to prevent redraw on vertical scroll
     let lastWidth = window.innerWidth;
 
     const resize = () => {
@@ -86,7 +85,6 @@ export function initRenderer() {
     window.addEventListener('resize', resize);
     resize(); 
 
-    // Init Puddles
     for(let i=0; i<15; i++) {
         visualState.puddleMap.push({
             x: Math.random() * width,
@@ -96,7 +94,6 @@ export function initRenderer() {
         });
     }
 
-    // Audio Init
     window.addEventListener('click', () => { AUDIO.init(); }, { once: true });
     window.addEventListener('touchstart', () => { AUDIO.init(); }, { once: true });
     
@@ -185,27 +182,26 @@ function updateUI(isNight, targetConfig) {
             uiElements.icon.innerText = isNight ? '🌙' : (timeOfDay < 0.3 || timeOfDay > 0.7 ? '🌅' : '☀️');
         }
     }
-    if (uiElements.weather) uiElements.weather.innerText = isNight && targetConfig.label.includes("Sunny") ? "Clear Night" : targetConfig.label;
     
-    // --- WIND ARROW ROTATION FIX ---
+    // RESTORED WEATHER INDICATOR LOGIC
+    if (uiElements.weather) {
+        uiElements.weather.innerText = isNight && targetConfig.label.includes("Sunny") 
+            ? "Clear Night" 
+            : targetConfig.label;
+    }
+    
+    // Wind Arrow
     if (uiElements.windSpeed && uiElements.windArrow) {
         uiElements.windSpeed.innerText = Math.floor(Math.abs(STATE.physics.direction * STATE.physics.force) * 120);
-        // Map direction (-1 left to 1 right) to rotation (180deg to 0deg)
-        // Default arrow '➡' points Right (0deg).
-        // If Wind is -1 (Left), rotate 180deg.
         let rot = 0;
         if (STATE.physics.direction < 0) rot = 180;
-        
         uiElements.windArrow.style.transform = `rotate(${rot}deg)`;
     }
 
     if (uiElements.plantCount) uiElements.plantCount.innerText = STATE.plants.length;
-
-    // --- PUDDLE & SNOW STATS ---
     if (uiElements.puddle) uiElements.puddle.innerText = Math.floor(visualState.puddleLevel * 100) + "%";
     if (uiElements.snow) uiElements.snow.innerText = Math.floor(visualState.snowLevel * 100) + "%";
 
-    // --- BEAM STRENGTH ---
     if (uiElements.beams) {
         if (STATE.currentWeather.includes('rain') || STATE.currentWeather.includes('storm')) {
             uiElements.beams.innerText = "0%";
@@ -223,7 +219,6 @@ function updateUI(isNight, targetConfig) {
 function updateParticles(config) {
     const P = STATE.physics;
     
-    // 1. Spawning
     if(STATE.rainDrops.length < 2000) {
         if(config.rainRate) for(let i=0; i<config.rainRate; i++) spawnParticle('rain');
         if(config.snowRate) for(let i=0; i<config.snowRate; i++) spawnParticle('snow');
@@ -234,7 +229,6 @@ function updateParticles(config) {
         if (!config.rainRate && !config.snowRate && !config.ashRate && Math.random() < 0.1) spawnParticle('pollen');
     }
 
-    // 2. Physics
     for(let i=STATE.rainDrops.length-1; i>=0; i--) {
         const p = STATE.rainDrops[i];
         const windX = (P.force * P.direction) * 10;
@@ -276,7 +270,6 @@ function updateParticles(config) {
         }
     }
 
-    // 3. Splashes
     for(let i=visualState.splashes.length-1; i>=0; i--) {
         const s = visualState.splashes[i];
         s.age++;
@@ -318,8 +311,7 @@ function draw(now) {
 
     const P = STATE.physics;
     
-    // --- FREEZE LOGIC ---
-    // Snap to 100% frozen if snow is deep (> 0.6)
+    // Freeze Factor Logic
     let freezeFactor = 0;
     if (visualState.snowLevel > 0.6) {
         freezeFactor = 1.0; 
@@ -346,8 +338,10 @@ function draw(now) {
         drawBlade(blade, finalLean);
     });
 
-    // Plants
+    // Reset Hover
     STATE.hoveredPlant = null;
+
+    // Plants
     STATE.plants.sort((a,b) => a.y - b.y).forEach(p => {
         const age = now - (p.server_time || 0);
         
@@ -364,6 +358,11 @@ function draw(now) {
     drawParticles();
     drawSplashes();
     drawAtmosphere();
+
+    // Draw Name Tag LAST (On Top)
+    if (STATE.hoveredPlant) {
+        drawNameTag(STATE.hoveredPlant);
+    }
 }
 
 function drawPlant(p, rotation, age) {
@@ -402,11 +401,9 @@ function drawPlant(p, rotation, age) {
 
     ctx.rotate(-rotation);
     
-    // --- HOVER LOGIC ---
-    // If plant is roughly 60px wide and 160px tall
+    // Hover Detection
     if (Math.abs(STATE.mouse.x - p.x) < 40 && STATE.mouse.y < p.y && STATE.mouse.y > p.y - 150) {
         STATE.hoveredPlant = p;
-        drawNameTag(p);
     }
     ctx.restore();
 }
@@ -475,6 +472,15 @@ function drawParticles() {
     });
 }
 
+function drawBlade(b, wind) {
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    const tipX = b.x + Math.sin(b.baseAngle + wind) * b.height;
+    const tipY = b.y - b.height; 
+    ctx.quadraticCurveTo(b.x, b.y - b.height/2, tipX, tipY);
+    ctx.stroke();
+}
+
 function drawAtmosphere() {
     const config = CONFIG.WEATHER_TYPES[STATE.currentWeather] || CONFIG.WEATHER_TYPES['sunny'];
 
@@ -524,16 +530,38 @@ function drawAtmosphere() {
     }
 }
 
-function drawBlade(b, wind) {
-    ctx.beginPath();
-    ctx.moveTo(b.x, b.y);
-    const tipX = b.x + Math.sin(b.baseAngle + wind) * b.height;
-    const tipY = b.y - b.height; 
-    ctx.quadraticCurveTo(b.x, b.y - b.height/2, tipX, tipY);
-    ctx.stroke();
+function drawFiniteBeams() {
+    if (!width || !height || width <= 0) return;
+    if (STATE.currentWeather.includes('rain') || STATE.currentWeather.includes('storm')) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'overlay'; 
+    visualState.beams.forEach(b => {
+        const alpha = (Math.sin(b.alphaPhase) * 0.1 + 0.15) * (1.2 - timeOfDay);
+        if(alpha <= 0) return;
+        const tilt = (b.x - width / 2) * 0.8; 
+        const xStart = b.x;
+        const xEnd = b.x + tilt;
+        if (!Number.isFinite(xStart) || !Number.isFinite(xEnd) || !Number.isFinite(height)) return;
+        const grad = ctx.createLinearGradient(xStart, 0, xEnd, height);
+        grad.addColorStop(0, `rgba(255, 255, 230, ${b.opacity})`); 
+        grad.addColorStop(1, `rgba(255, 255, 230, 0)`);       
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(xStart - b.width/2, 0);
+        ctx.lineTo(xStart + b.width/2, 0);
+        ctx.lineTo(xEnd + b.width*2, height);
+        ctx.lineTo(xEnd - b.width*2, height);
+        ctx.fill();
+        b.x += b.speed;
+        b.opacity += (Math.random() - 0.5) * 0.01;
+        if (b.x > width + 200 || b.x < -200 || b.opacity <= 0) {
+            b.x = Math.random() * width;
+            b.opacity = Math.random() * 0.1 + 0.05;
+        }
+    });
+    ctx.restore();
 }
 
-// ... (Rest of helpers)
 function drawLayer(ctx, img, w, h, progress, applySnow) {
     if (progress <= 0.01) return;
     ctx.save();
@@ -597,38 +625,6 @@ function drawSplashes() {
         ctx.stroke();
     });
     ctx.globalAlpha = 1;
-}
-
-function drawFiniteBeams() {
-    if (!width || !height || width <= 0) return;
-    if (STATE.currentWeather.includes('rain') || STATE.currentWeather.includes('storm')) return;
-    ctx.save();
-    ctx.globalCompositeOperation = 'overlay'; 
-    visualState.beams.forEach(b => {
-        const alpha = (Math.sin(b.alphaPhase) * 0.1 + 0.15) * (1.2 - timeOfDay);
-        if(alpha <= 0) return;
-        const tilt = (b.x - width / 2) * 0.8; 
-        const xStart = b.x;
-        const xEnd = b.x + tilt;
-        if (!Number.isFinite(xStart) || !Number.isFinite(xEnd) || !Number.isFinite(height)) return;
-        const grad = ctx.createLinearGradient(xStart, 0, xEnd, height);
-        grad.addColorStop(0, `rgba(255, 255, 230, ${b.opacity})`); 
-        grad.addColorStop(1, `rgba(255, 255, 230, 0)`);       
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.moveTo(xStart - b.width/2, 0);
-        ctx.lineTo(xStart + b.width/2, 0);
-        ctx.lineTo(xEnd + b.width*2, height);
-        ctx.lineTo(xEnd - b.width*2, height);
-        ctx.fill();
-        b.x += b.speed;
-        b.opacity += (Math.random() - 0.5) * 0.01;
-        if (b.x > width + 200 || b.x < -200 || b.opacity <= 0) {
-            b.x = Math.random() * width;
-            b.opacity = Math.random() * 0.1 + 0.05;
-        }
-    });
-    ctx.restore();
 }
 
 function getImage(src) {

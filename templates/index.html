@@ -3,10 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Draw A Garden</title>
+    <title>Garden Sim: Atmosphere Edition</title>
     <link rel="stylesheet" href="src/styles.css">
     <style>
-        /* NUCLEAR MOBILE FIX: Prevents "Rubber Band" scrolling on iOS */
         html, body { 
             width: 100%; height: 100%; 
             margin: 0; padding: 0;
@@ -30,7 +29,8 @@
                     <span id="ui-time-icon" class="panel-icon">☀️</span> 
                     <span id="ui-time-text">12:00</span>
                     <span style="opacity:0.5; margin:0 5px;">|</span>
-                    <span id="ui-weather">Clear</span> </div>
+                    <span id="ui-weather">Clear</span>
+                </div>
                 
                 <div class="panel">
                     💨 <span id="ui-wind-speed">0</span>
@@ -47,6 +47,12 @@
                 </div>
 
                 <div class="panel">🌱 <span id="ui-plant-count">0</span></div>
+
+                <div class="panel">
+                    👤 <input type="text" id="username" value="Guest" 
+                       style="background:transparent; border:none; color:#4caf50; width:80px; font-weight:bold; text-align:center;"
+                       placeholder="Name">
+                </div>
             </div>
         </div>
     </div>
@@ -55,8 +61,6 @@
         <div class="editor-panel">
             <div style="text-align: center; margin-bottom: 5px;">
                 <h3>New Plant</h3>
-                <input type="text" id="username" placeholder="Your Name" value="Guest" 
-                       style="background:#333; border:1px solid #555; color:white; padding:5px; border-radius:4px; text-align:center;">
             </div>
 
             <div class="layer-tabs">
