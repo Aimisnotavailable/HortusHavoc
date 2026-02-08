@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, send_from_directory, render_template_string
+from flask import Flask, jsonify, request, send_from_directory, render_template
 from flask_cors import CORS
 import time
 import random
@@ -27,6 +27,13 @@ current_weather = "sunny"
 last_weather_change = 0
 WEATHER_DURATION_SEC = 60
 
+# --- GLOBAL ENVIRONMENT STATE ---
+# 0.0 = Dry/None, 1.0 = Max Saturation
+env_state = {
+    "snow_level": 0.0,
+    "puddle_level": 0.0
+}
+
 def load_plants():
     if os.path.exists(DB_FILE):
         try:
@@ -48,23 +55,46 @@ GLOBAL_PLANTS = load_plants()
 print(f"Server loaded {len(GLOBAL_PLANTS)} plants from {DB_FILE}")
 
 def update_weather_logic():
-    global current_weather, last_weather_change
+    global current_weather, last_weather_change, env_state
     
     # 1. Check Admin Override
     if admin_override["weather"]:
         current_weather = admin_override["weather"]
-        return
+    else:
+        # 2. Normal Random Logic
+        now = time.time()
+        if now - last_weather_change > WEATHER_DURATION_SEC:
+            weights = [0.3] + [0.7 / (len(WEATHER_TYPES)-1)] * (len(WEATHER_TYPES)-1)
+            current_weather = random.choices(WEATHER_TYPES, weights=weights, k=1)[0]
+            last_weather_change = now
 
-    # 2. Normal Random Logic
-    now = time.time()
-    if now - last_weather_change > WEATHER_DURATION_SEC:
-        weights = [0.3] + [0.7 / (len(WEATHER_TYPES)-1)] * (len(WEATHER_TYPES)-1)
-        current_weather = random.choices(WEATHER_TYPES, weights=weights, k=1)[0]
-        last_weather_change = now
+    # 3. Simulate Environment
+    w = current_weather
+    
+    # Snow Logic
+    if "snow" in w or "blizzard" in w:
+        rate = 0.002 if "blizzard" in w else 0.0005
+        env_state["snow_level"] = min(1.0, env_state["snow_level"] + rate)
+    elif "sunny" in w:
+        env_state["snow_level"] = max(0.0, env_state["snow_level"] - 0.001)
+    else:
+        env_state["snow_level"] = max(0.0, env_state["snow_level"] - 0.0002)
+
+    # Puddle Logic
+    if "rain" in w or "storm" in w:
+        rate = 0.005 if "storm" in w else 0.001
+        env_state["puddle_level"] = min(1.0, env_state["puddle_level"] + rate)
+        env_state["snow_level"] = max(0.0, env_state["snow_level"] - 0.002)
+    elif "sunny" in w:
+        env_state["puddle_level"] = max(0.0, env_state["puddle_level"] - 0.001)
 
 @app.route('/')
 def index():
     return send_from_directory(app.static_folder, 'index.html')
+
+@app.route('/admin')
+def admin():
+    return render_template('admin.html', weather_types=WEATHER_TYPES)
 
 @app.route('/<path:path>')
 def serve_static(path):
@@ -85,7 +115,6 @@ def add_plant():
         "author": data.get('author', 'Anonymous'),
         "server_time": time.time() * 1000
     }
-    
     GLOBAL_PLANTS.append(new_plant)
     save_plants()
     return jsonify(new_plant)
@@ -94,104 +123,20 @@ def add_plant():
 def get_updates():
     update_weather_logic()
     
-    # Apply Time Offset
     current_time = (time.time() + (admin_override["time_offset"] * 3600)) * 1000
-    
     try:
         since = float(request.args.get('since', 0))
     except:
         since = 0.0
-
+        
     new_plants = [p for p in GLOBAL_PLANTS if p.get('server_time', 0) > since]
     
     return jsonify({
         "time": current_time,
         "weather": current_weather,
+        "env": env_state,
         "plants": new_plants
     })
-
-# --- ADMIN PANEL ---
-@app.route('/admin')
-def admin_panel():
-    # Simple HTML Dashboard
-    html = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Garden Admin</title>
-        <style>
-            body { font-family: monospace; background: #222; color: #eee; padding: 20px; }
-            .panel { background: #333; padding: 20px; margin-bottom: 20px; border-radius: 8px; }
-            button { background: #4caf50; border: none; padding: 10px 20px; color: white; cursor: pointer; margin: 5px; }
-            button.danger { background: #f44336; }
-            button:hover { opacity: 0.8; }
-            input { padding: 8px; background: #444; border: 1px solid #555; color: white; }
-            label { display: inline-block; width: 150px; }
-        </style>
-    </head>
-    <body>
-        <h1>🌱 Garden Admin Panel</h1>
-        
-        <div class="panel">
-            <h3>🎮 Weather Control</h3>
-            <p>Current: <strong id="cur-weather">Loading...</strong></p>
-            <div id="weather-btns"></div>
-            <button onclick="setWeather(null)" style="background:#555">🔄 Auto Mode</button>
-        </div>
-
-        <div class="panel">
-            <h3>⏳ Time Travel</h3>
-            <label>Offset (Hours):</label>
-            <input type="number" id="time-offset" value="0">
-            <button onclick="setTime()">Apply</button>
-            <button onclick="resetTime()" style="background:#555">Reset to Real Time</button>
-        </div>
-
-        <script>
-            const weathers = """ + json.dumps(WEATHER_TYPES) + """;
-            
-            // Generate Buttons
-            const btnContainer = document.getElementById('weather-btns');
-            weathers.forEach(w => {
-                const btn = document.createElement('button');
-                btn.innerText = w;
-                btn.onclick = () => setWeather(w);
-                btnContainer.appendChild(btn);
-            });
-
-            function setWeather(w) {
-                fetch('/api/admin/update', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ weather: w })
-                }).then(refreshStatus);
-            }
-
-            function setTime() {
-                const offset = document.getElementById('time-offset').value;
-                fetch('/api/admin/update', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ time_offset: parseFloat(offset) })
-                }).then(refreshStatus);
-            }
-            
-            function resetTime() {
-                document.getElementById('time-offset').value = 0;
-                setTime();
-            }
-
-            function refreshStatus() {
-                fetch('/api/updates').then(r => r.json()).then(data => {
-                    document.getElementById('cur-weather').innerText = data.weather;
-                });
-            }
-            refreshStatus();
-        </script>
-    </body>
-    </html>
-    """
-    return render_template_string(html)
 
 @app.route('/api/admin/update', methods=['POST'])
 def admin_update():

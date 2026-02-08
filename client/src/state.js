@@ -6,6 +6,12 @@ export const STATE = {
     mouse: { x: -100, y: -100 },
     hoveredPlant: null,
     
+    // Synced Environment State (Target values from server)
+    world: {
+        snowLevel: 0,
+        puddleLevel: 0
+    },
+
     // Editor State
     editorStep: 0,
     tempParts: {}, 

@@ -28,8 +28,7 @@ export function pollUpdates() {
                 const existingIds = new Set(STATE.plants.map(p => p.id));
                 const uniqueNew = data.plants.filter(p => !existingIds.has(p.id));
                 
-                if (uniqueNew.length > 0) {
-                    STATE.plants.push(...uniqueNew);
+                if (uniqueNew.length > 0) {                    STATE.plants.push(...uniqueNew);
                     // OPTIMIZATION: Sort ONCE when data arrives, not every frame
                     STATE.plants.sort((a,b) => a.y - b.y);
                     
@@ -49,10 +48,16 @@ export function pollUpdates() {
                 console.log(`Weather Update: ${data.weather}`);
                 STATE.currentWeather = data.weather;
             }
+
+            // D. Sync Environment (Snow/Puddles)
+            if(data.env) {
+                if(typeof data.env.snow_level === 'number') STATE.world.snowLevel = data.env.snow_level;
+                if(typeof data.env.puddle_level === 'number') STATE.world.puddleLevel = data.env.puddle_level;
+            }
         })
         .catch(err => console.error("Polling error:", err))
         .finally(() => {
-            // CRITICAL FIX: Schedule the next poll
+            // CRITICAL FIX: Schedule the next poll regardless of success/fail
             setTimeout(pollUpdates, CONFIG.POLL_INTERVAL);
         });
 }

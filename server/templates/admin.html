@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Garden Admin Panel</title>
+    <style>
+        body { font-family: monospace; background: #1a1a1a; color: #e0e0e0; padding: 20px; max-width: 600px; margin: 0 auto; }
+        h1 { border-bottom: 2px solid #4caf50; padding-bottom: 10px; }
+        .card { background: #2d2d2d; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #888; }
+        select, input, button { width: 100%; padding: 10px; margin-bottom: 15px; background: #1a1a1a; border: 1px solid #444; color: #fff; border-radius: 4px; }
+        button { background: #4caf50; border: none; cursor: pointer; font-weight: bold; transition: background 0.2s; }
+        button:hover { background: #45a049; }
+        button.secondary { background: #444; }
+        .status-box { padding: 10px; background: #000; border: 1px solid #333; font-size: 0.9em; margin-top: 10px; white-space: pre-wrap; }
+        .row { display: flex; gap: 10px; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Garden Control</h1>
+
+    <div class="card">
+        <label>Force Weather Event</label>
+        <div class="row">
+            <select id="weather-select">
+                <option value="">-- Release Override (Auto) --</option>
+                {% for w in weather_types %}
+                <option value="{{ w }}">{{ w|capitalize }}</option>
+                {% endfor %}
+            </select>
+            <button onclick="setWeather()" style="width: auto;">Apply</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <label>Time Offset (Hours)</label>
+        <p style="font-size: 0.8em; color: #aaa; margin-top: -5px;">Positive = Future, Negative = Past</p>
+        <div class="row">
+            <input type="number" id="time-offset" value="0" step="1">
+            <button onclick="setTime()" style="width: auto;">Set</button>
+            <button onclick="resetTime()" class="secondary" style="width: auto;">Reset</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <label>Live Server Status</label>
+        <button onclick="refreshStatus()">Refresh Now</button>
+        <div id="status-output" class="status-box">Loading...</div>
+    </div>
+
+    <script>
+        function setWeather() {
+            const w = document.getElementById('weather-select').value;
+            // Send empty string to clear override (Python treats empty string as None-ish if handled, or we send null)
+            const payload = { weather: w === "" ? null : w };
+            
+            fetch('/api/admin/update', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            }).then(refreshStatus);
+        }
+
+        function setTime() {
+            const offset = document.getElementById('time-offset').value;
+            fetch('/api/admin/update', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ time_offset: parseFloat(offset) })
+            }).then(refreshStatus);
+        }
+        
+        function resetTime() {
+            document.getElementById('time-offset').value = 0;
+            setTime();
+        }
+
+        function refreshStatus() {
+            fetch('/api/updates')
+                .then(r => r.json())
+                .then(data => {
+                    const output = 
+`Time:    ${new Date(data.time).toLocaleTimeString()}
+Weather: ${data.weather}
+Snow:    ${(data.env.snow_level * 100).toFixed(1)}%
+Puddles: ${(data.env.puddle_level * 100).toFixed(1)}%
+Plants:  ${data.plants.length}`;
+                    document.getElementById('status-output').innerText = output;
+                });
+        }
+
+        // Auto refresh every 2 seconds
+        refreshStatus();
+        setInterval(refreshStatus, 2000);
+    </script>
+</body>
+</html>
