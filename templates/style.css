@@ -1,0 +1,64 @@
+body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+
+/* The Game Canvas */
+#gameCanvas { display: block; }
+
+/* UI Layers */
+#ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+#top-bar { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; pointer-events: auto; }
+
+.panel { 
+    background: rgba(0,0,0,0.6); 
+    color: white; 
+    padding: 10px 20px; 
+    border-radius: 30px; 
+    border: 1px solid rgba(255,255,255,0.1); 
+    font-weight: bold; 
+}
+
+input#username { 
+    background: transparent; border: none; border-bottom: 2px solid #888; 
+    color: #4caf50; font-weight: bold; width: 120px; text-align: center; font-size: 16px; 
+}
+input#username:focus { outline: none; border-bottom: 2px solid #4caf50; }
+
+/* EDITOR MODAL */
+#editor-modal { 
+    display: none; /* Hidden by default */
+    position: absolute; top: 50%; left: 50%; 
+    transform: translate(-50%, -50%); 
+    background: #222; padding: 20px; border-radius: 16px;
+    border: 1px solid #444; box-shadow: 0 50px 100px rgba(0,0,0,1);
+    pointer-events: auto; text-align: center; color: white; z-index: 100;
+    min-width: 300px;
+}
+
+/* Part Selection Grid (The 404 images were breaking this) */
+#part-selection {
+    display: flex; gap: 10px; justify-content: center; margin-bottom: 15px;
+}
+#part-selection img {
+    width: 60px; height: 60px; border: 2px solid #444; border-radius: 8px; cursor: pointer; background: #333;
+}
+#part-selection img:hover { border-color: #4caf50; transform: scale(1.1); }
+
+/* Preview Box */
+.preview-box {
+    background: #111; border: 2px solid #444; border-radius: 8px;
+    margin: 0 auto 15px auto; width: 160px; height: 160px;
+    background-image: radial-gradient(#333 1px, transparent 1px);
+    background-size: 10px 10px;
+}
+
+/* Buttons */
+.buttons button {
+    padding: 10px 20px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;
+}
+#next-btn { background: #2ecc71; color: #003300; }
+#next-btn:hover { background: #27ae60; }
+#cancel-btn { background: transparent; color: #ef5350; }
+#cancel-btn:hover { text-decoration: underline; }
+
+/* Wind UI */
+#wind-arrow { display: inline-block; transform-origin: center; }
+.hidden { display: none !important; }
