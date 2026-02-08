@@ -18,7 +18,6 @@ const visualState = {
 const imageCache = {};
 const lerp = (start, end, amt) => (1 - amt) * start + amt * end;
 
-// Robust Color Interpolation (Hex)
 const lerpColorHex = (a, b, amount) => {
     let hex = a.replace(/#/g, '');
     if (hex.length === 3) hex = hex.split('').map(c => c+c).join('');
@@ -44,10 +43,12 @@ const uiElements = {
     weather: document.getElementById('ui-weather'),
     windSpeed: document.getElementById('ui-wind-speed'),
     windArrow: document.getElementById('ui-wind-arrow'),
-    plantCount: document.getElementById('ui-plant-count')
+    plantCount: document.getElementById('ui-plant-count'),
+    puddle: document.getElementById('ui-puddle'),
+    snow: document.getElementById('ui-snow'),
+    beams: document.getElementById('ui-beams')
 };
 
-// --- LIGHTING STATE ---
 let lightningFlash = 0;
 let timeOfDay = 0.5; 
 let auroraOpacity = 0; 
@@ -62,7 +63,7 @@ export function initRenderer() {
     if (!canvas) return;
     ctx = canvas.getContext('2d', { alpha: false });
 
-    // MOBILE FIX: Track last width to prevent redraw on vertical scroll (URL bar)
+    // MOBILE FIX: Track last width to prevent redraw on vertical scroll
     let lastWidth = window.innerWidth;
 
     const resize = () => {
@@ -78,8 +79,6 @@ export function initRenderer() {
         if (widthChanged || firstRun) {
             generateGrass(); 
             lastWidth = window.innerWidth;
-            
-            // Re-init beams
             visualState.beams = [];
             for(let i=0; i<8; i++) spawnBeam(true);
         }
@@ -124,13 +123,11 @@ function generateGrass() {
 
 function spawnBeam(randomStart = false) {
     if (!width || !height) return; 
-
     const x = randomStart ? Math.random() * width : width + 100;
     const y = Math.random() * height;
     
     visualState.beams.push({
-        x: x,
-        y: y,
+        x: x, y: y,
         length: 300 + Math.random() * 300, 
         width: 60 + Math.random() * 100,   
         alphaPhase: Math.random() * Math.PI,
@@ -189,22 +186,55 @@ function updateUI(isNight, targetConfig) {
         }
     }
     if (uiElements.weather) uiElements.weather.innerText = isNight && targetConfig.label.includes("Sunny") ? "Clear Night" : targetConfig.label;
-    if (uiElements.windSpeed) uiElements.windSpeed.innerText = Math.floor(Math.abs(STATE.physics.direction * STATE.physics.force) * 120);
+    
+    // --- WIND ARROW ROTATION FIX ---
+    if (uiElements.windSpeed && uiElements.windArrow) {
+        uiElements.windSpeed.innerText = Math.floor(Math.abs(STATE.physics.direction * STATE.physics.force) * 120);
+        // Map direction (-1 left to 1 right) to rotation (180deg to 0deg)
+        // Default arrow '➡' points Right (0deg).
+        // If Wind is -1 (Left), rotate 180deg.
+        let rot = 0;
+        if (STATE.physics.direction < 0) rot = 180;
+        
+        uiElements.windArrow.style.transform = `rotate(${rot}deg)`;
+    }
+
     if (uiElements.plantCount) uiElements.plantCount.innerText = STATE.plants.length;
+
+    // --- PUDDLE & SNOW STATS ---
+    if (uiElements.puddle) uiElements.puddle.innerText = Math.floor(visualState.puddleLevel * 100) + "%";
+    if (uiElements.snow) uiElements.snow.innerText = Math.floor(visualState.snowLevel * 100) + "%";
+
+    // --- BEAM STRENGTH ---
+    if (uiElements.beams) {
+        if (STATE.currentWeather.includes('rain') || STATE.currentWeather.includes('storm')) {
+            uiElements.beams.innerText = "0%";
+            uiElements.beams.style.opacity = 0.5;
+        } else {
+            let strength = Math.floor((1.2 - timeOfDay) * 80); 
+            if (strength < 0) strength = 0;
+            if (strength > 100) strength = 100;
+            uiElements.beams.innerText = strength + "%";
+            uiElements.beams.style.opacity = 1.0; 
+        }
+    }
 }
 
 function updateParticles(config) {
     const P = STATE.physics;
     
+    // 1. Spawning
     if(STATE.rainDrops.length < 2000) {
         if(config.rainRate) for(let i=0; i<config.rainRate; i++) spawnParticle('rain');
         if(config.snowRate) for(let i=0; i<config.snowRate; i++) spawnParticle('snow');
         if(config.hailRate) for(let i=0; i<config.hailRate; i++) spawnParticle('hail');
         if(config.ashRate) for(let i=0; i<config.ashRate; i++) spawnParticle('ash');
         if(config.debris && Math.random() < config.debris) spawnParticle('debris');
-        if (!config.rainRate && !config.snowRate && Math.random() < 0.1) spawnParticle('pollen');
+        if(config.meteorRate && Math.random() < 0.05) spawnParticle('meteor');
+        if (!config.rainRate && !config.snowRate && !config.ashRate && Math.random() < 0.1) spawnParticle('pollen');
     }
 
+    // 2. Physics
     for(let i=STATE.rainDrops.length-1; i>=0; i--) {
         const p = STATE.rainDrops[i];
         const windX = (P.force * P.direction) * 10;
@@ -214,14 +244,31 @@ function updateParticles(config) {
             if (p.y > p.targetY) { 
                 visualState.splashes.push({ x: p.x, y: p.y, age: 0 });
                 STATE.rainDrops.splice(i, 1);
-                continue;
             }
         } 
         else if (p.type === 'snow') { 
             p.y += 2; p.x += Math.sin(p.y * 0.05) * 2 + windX * 0.5;
         }
-        else {
-            p.y += 5; p.x += windX;
+        else if (p.type === 'hail') {
+            p.y += 25; p.x += windX * 0.5;
+        }
+        else if (p.type === 'ash') {
+            p.y += 1.0; p.x += windX + Math.sin(p.y * 0.02) * 2; 
+        }
+        else if (p.type === 'debris') {
+            p.x += (windX * 1.5) + 3; 
+            p.y += Math.sin(p.x * 0.05) * 2 + 1; 
+            p.r += 0.2; 
+        }
+        else if (p.type === 'meteor') {
+            p.x -= 20; p.y += 12; 
+            p.alpha -= 0.015; 
+            if(p.alpha <= 0) STATE.rainDrops.splice(i, 1);
+        }
+        else if (p.type === 'pollen') {
+            p.y += 0.5; p.x += windX;
+            p.alpha -= 0.005;
+            if(p.alpha <= 0) STATE.rainDrops.splice(i, 1);
         }
 
         if(p.y > height + 50 || p.x > width + 200 || p.x < -200) {
@@ -229,6 +276,7 @@ function updateParticles(config) {
         }
     }
 
+    // 3. Splashes
     for(let i=visualState.splashes.length-1; i>=0; i--) {
         const s = visualState.splashes[i];
         s.age++;
@@ -241,6 +289,12 @@ function spawnParticle(type) {
     const P = STATE.physics;
     const windDir = P.direction > 0 ? -1 : 1;
     const windOffset = (P.force * 500) * windDir; 
+    
+    if (type === 'meteor') {
+        STATE.rainDrops.push({ type: 'meteor', x: Math.random() * width + 300, y: -200, alpha: 1.0 });
+        return;
+    }
+
     let startX = Math.random() * (width + 400) - 200 + windOffset;
     const targetY = Math.random() * height; 
     
@@ -248,7 +302,9 @@ function spawnParticle(type) {
         type: type, 
         x: startX, 
         y: -50, 
-        targetY: (type === 'rain') ? targetY : height + 100 
+        targetY: (type === 'rain') ? targetY : height + 100,
+        r: Math.random() * Math.PI, 
+        alpha: 1.0
     });
 }
 
@@ -261,7 +317,17 @@ function draw(now) {
     drawFiniteBeams();
 
     const P = STATE.physics;
-    const freezeFactor = Math.min(1.0, visualState.snowLevel * 1.5);
+    
+    // --- FREEZE LOGIC ---
+    // Snap to 100% frozen if snow is deep (> 0.6)
+    let freezeFactor = 0;
+    if (visualState.snowLevel > 0.6) {
+        freezeFactor = 1.0; 
+    } else {
+        freezeFactor = visualState.snowLevel * 1.5;
+    }
+    freezeFactor = Math.min(1.0, freezeFactor);
+
     const baseLean = P.force * P.direction * 1.2;
     const flutter = Math.cos(now * 0.005) * (0.2 * P.force);
     const dynamicWind = baseLean + flutter;
@@ -295,50 +361,9 @@ function draw(now) {
     });
 
     drawSnowCover();
-    drawParticles(); // <--- FIXED: Added this call back!
+    drawParticles();
     drawSplashes();
     drawAtmosphere();
-}
-
-function drawFiniteBeams() {
-    if (!width || !height || width <= 0) return;
-    if (STATE.currentWeather.includes('rain') || STATE.currentWeather.includes('storm')) return;
-
-    ctx.save();
-    ctx.globalCompositeOperation = 'overlay'; 
-
-    visualState.beams.forEach(b => {
-        const alpha = (Math.sin(b.alphaPhase) * 0.1 + 0.15) * (1.2 - timeOfDay);
-        if(alpha <= 0) return;
-
-        const tilt = (b.x - width / 2) * 0.8; 
-        const xStart = b.x;
-        const xEnd = b.x + tilt;
-
-        if (!Number.isFinite(xStart) || !Number.isFinite(xEnd) || !Number.isFinite(height)) return;
-
-        const grad = ctx.createLinearGradient(xStart, 0, xEnd, height);
-        grad.addColorStop(0, `rgba(255, 255, 230, ${b.opacity})`); 
-        grad.addColorStop(1, `rgba(255, 255, 230, 0)`);       
-
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.moveTo(xStart - b.width/2, 0);
-        ctx.lineTo(xStart + b.width/2, 0);
-        ctx.lineTo(xEnd + b.width*2, height);
-        ctx.lineTo(xEnd - b.width*2, height);
-        ctx.fill();
-        
-        b.x += b.speed;
-        b.opacity += (Math.random() - 0.5) * 0.01;
-        
-        if (b.x > width + 200 || b.x < -200 || b.opacity <= 0) {
-            b.x = Math.random() * width;
-            b.opacity = Math.random() * 0.1 + 0.05;
-        }
-    });
-
-    ctx.restore();
 }
 
 function drawPlant(p, rotation, age) {
@@ -376,30 +401,152 @@ function drawPlant(p, rotation, age) {
     }
 
     ctx.rotate(-rotation);
-    if (Math.abs(STATE.mouse.x - p.x) < 30 && Math.abs(STATE.mouse.y - p.y) < 80) {
+    
+    // --- HOVER LOGIC ---
+    // If plant is roughly 60px wide and 160px tall
+    if (Math.abs(STATE.mouse.x - p.x) < 40 && STATE.mouse.y < p.y && STATE.mouse.y > p.y - 150) {
         STATE.hoveredPlant = p;
         drawNameTag(p);
     }
     ctx.restore();
 }
 
+function drawNameTag(p) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(p.x - 50, p.y - 130, 100, 24);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(p.author || 'Anon', p.x, p.y - 113);
+    ctx.restore();
+}
+
+function drawParticles() {
+    STATE.rainDrops.forEach(p => {
+        if(p.type === 'rain') {
+            ctx.strokeStyle = 'rgba(180, 200, 255, 0.6)';
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - 2, p.y + 8); ctx.stroke();
+        } 
+        else if (p.type === 'snow') {
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI*2); ctx.fill();
+        } 
+        else if (p.type === 'hail') {
+            ctx.fillStyle = 'rgba(200,220,255,0.9)';
+            ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill();
+        }
+        else if (p.type === 'ash') {
+            ctx.fillStyle = 'rgba(50, 50, 50, 0.8)';
+            ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI*2); ctx.fill();
+        }
+        else if (p.type === 'debris') {
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.r);
+            ctx.fillStyle = 'rgba(140, 120, 90, 0.6)';
+            ctx.beginPath();
+            ctx.moveTo(-3, -2); ctx.lineTo(2, -3); ctx.lineTo(3, 2); ctx.lineTo(-2, 3);
+            ctx.fill();
+            ctx.restore();
+        }
+        else if (p.type === 'meteor') {
+            const tailX = p.x + 60;
+            const tailY = p.y - 35;
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            const grad = ctx.createLinearGradient(p.x, p.y, tailX, tailY);
+            grad.addColorStop(0, `rgba(255, 220, 150, ${p.alpha})`);
+            grad.addColorStop(1, `rgba(255, 50, 50, 0)`);
+            ctx.strokeStyle = grad;
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(tailX, tailY);
+            ctx.stroke();
+            ctx.restore();
+        }
+        else if (p.type === 'pollen') {
+            ctx.fillStyle = `rgba(255, 235, 59, ${p.alpha})`;
+            ctx.beginPath(); ctx.arc(p.x, p.y, 1, 0, Math.PI*2); ctx.fill();
+        }
+    });
+}
+
+function drawAtmosphere() {
+    const config = CONFIG.WEATHER_TYPES[STATE.currentWeather] || CONFIG.WEATHER_TYPES['sunny'];
+
+    if (config.vis && config.vis < 1.0) {
+        const fogAlpha = (1.0 - config.vis) * 0.7; 
+        let fr=200, fg=220, fb=230; 
+        if (STATE.currentWeather.includes('snow') || STATE.currentWeather.includes('blizzard')) {
+            fr=240; fg=245; fb=255; 
+        } else if (STATE.currentWeather.includes('dust') || STATE.currentWeather.includes('sand')) {
+            fr=194; fg=178; fb=128; 
+        } else if (STATE.currentWeather.includes('ash') || STATE.currentWeather.includes('volcanic')) {
+            fr=60; fg=60; fb=60; 
+        }
+        ctx.fillStyle = `rgba(${fr},${fg},${fb}, ${fogAlpha})`;
+        ctx.fillRect(0,0, width, height);
+    }
+
+    if (config.tint) {
+        ctx.fillStyle = config.tint;
+        ctx.fillRect(0, 0, width, height);
+    }
+
+    const isNight = timeOfDay > 0.75 || timeOfDay < 0.25;
+    let darkness = isNight ? 0.6 : 0.0;
+
+    if (config.dark && !isNight) darkness = Math.max(darkness, 0.35); 
+    if (isNight && config.dark) darkness = 0.8; 
+
+    if (darkness > 0) {
+        ctx.fillStyle = `rgba(0, 0, 10, ${darkness})`;
+        ctx.fillRect(0, 0, width, height);
+    }
+
+    if (lightningFlash > 0) {
+        ctx.fillStyle = `rgba(255, 255, 255, ${lightningFlash * 0.8})`;
+        ctx.fillRect(0, 0, width, height);
+    }
+
+    if (auroraOpacity > 0.05) {
+        const t = Date.now() * 0.0005;
+        const grad = ctx.createLinearGradient(0, 0, width, height);
+        grad.addColorStop(0, `rgba(0, 255, 128, 0)`);
+        grad.addColorStop(0.5 + Math.sin(t)*0.2, `rgba(0, 255, 128, ${auroraOpacity * 0.3})`);
+        grad.addColorStop(1, `rgba(0,0,0,0)`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, width, height);
+    }
+}
+
+function drawBlade(b, wind) {
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    const tipX = b.x + Math.sin(b.baseAngle + wind) * b.height;
+    const tipY = b.y - b.height; 
+    ctx.quadraticCurveTo(b.x, b.y - b.height/2, tipX, tipY);
+    ctx.stroke();
+}
+
+// ... (Rest of helpers)
 function drawLayer(ctx, img, w, h, progress, applySnow) {
     if (progress <= 0.01) return;
-    
     ctx.save();
     ctx.beginPath();
     const visibleH = h * progress;
     ctx.rect(-w/2, -visibleH, w, visibleH);
     ctx.clip();
-    
     ctx.drawImage(img, -w/2, -h, w, h);
-
     if (applySnow) {
         ctx.globalCompositeOperation = 'source-atop';
         ctx.fillStyle = `rgba(255, 255, 255, ${visualState.snowLevel * 0.9})`;
         ctx.fillRect(-w/2, -h, w, h);
     }
-
     ctx.restore();
 }
 
@@ -413,7 +560,6 @@ function drawGround() {
 function drawPuddles() {
     if(visualState.puddleLevel < 0.05) return;
     ctx.save();
-    
     visualState.puddleMap.forEach(p => {
         let r=100, g=150, b=200; 
         if (visualState.snowLevel > 0.2) {
@@ -422,7 +568,6 @@ function drawPuddles() {
             g = lerp(150, 240, amt);
             b = lerp(200, 250, amt);
         }
-
         ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${visualState.puddleLevel * 0.6})`;
         ctx.beginPath();
         const curW = p.w * visualState.puddleLevel;
@@ -454,72 +599,35 @@ function drawSplashes() {
     ctx.globalAlpha = 1;
 }
 
-function drawAtmosphere() {
-    const config = CONFIG.WEATHER_TYPES[STATE.currentWeather];
-    if (config && config.vis && config.vis < 1.0) {
-        const fogAlpha = (1.0 - config.vis) * 0.6;
-        let fr=200, fg=220, fb=230; 
-        if (STATE.currentWeather.includes('snow') || STATE.currentWeather.includes('blizzard')) {
-            fr=255; fg=255; fb=255; 
-        }
-        ctx.fillStyle = `rgba(${fr},${fg},${fb}, ${fogAlpha})`;
-        ctx.fillRect(0,0, width, height);
-    }
-    
-    const isNight = timeOfDay > 0.75 || timeOfDay < 0.25;
-    if(isNight) {
-        ctx.fillStyle = 'rgba(0, 0, 10, 0.5)';
-        ctx.fillRect(0, 0, width, height);
-    }
-    if (lightningFlash > 0) {
-        ctx.fillStyle = `rgba(255, 255, 255, ${lightningFlash * 0.8})`;
-        ctx.fillRect(0, 0, width, height);
-    }
-    if (auroraOpacity > 0.05) {
-        const t = Date.now() * 0.0005;
-        const grad = ctx.createLinearGradient(0, 0, width, height);
-        grad.addColorStop(0, `rgba(0, 255, 128, 0)`);
-        grad.addColorStop(0.5 + Math.sin(t)*0.2, `rgba(0, 255, 128, ${auroraOpacity * 0.3})`);
-        grad.addColorStop(1, `rgba(0,0,0,0)`);
+function drawFiniteBeams() {
+    if (!width || !height || width <= 0) return;
+    if (STATE.currentWeather.includes('rain') || STATE.currentWeather.includes('storm')) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'overlay'; 
+    visualState.beams.forEach(b => {
+        const alpha = (Math.sin(b.alphaPhase) * 0.1 + 0.15) * (1.2 - timeOfDay);
+        if(alpha <= 0) return;
+        const tilt = (b.x - width / 2) * 0.8; 
+        const xStart = b.x;
+        const xEnd = b.x + tilt;
+        if (!Number.isFinite(xStart) || !Number.isFinite(xEnd) || !Number.isFinite(height)) return;
+        const grad = ctx.createLinearGradient(xStart, 0, xEnd, height);
+        grad.addColorStop(0, `rgba(255, 255, 230, ${b.opacity})`); 
+        grad.addColorStop(1, `rgba(255, 255, 230, 0)`);       
         ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, width, height);
-    }
-}
-
-function drawBlade(b, wind) {
-    ctx.beginPath();
-    ctx.moveTo(b.x, b.y);
-    const tipX = b.x + Math.sin(b.baseAngle + wind) * b.height;
-    const tipY = b.y - b.height; 
-    ctx.quadraticCurveTo(b.x, b.y - b.height/2, tipX, tipY);
-    ctx.stroke();
-}
-
-// --- FIXED: Function was missing in previous paste ---
-function drawParticles() {
-    STATE.rainDrops.forEach(p => {
-        if(p.type === 'rain') {
-            ctx.strokeStyle = 'rgba(180, 200, 255, 0.6)';
-            ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - 2, p.y + 8); ctx.stroke();
-        } else if (p.type === 'snow') {
-            ctx.fillStyle = 'rgba(255,255,255,0.9)';
-            ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, Math.PI*2); ctx.fill();
-        } else if (p.type === 'pollen') {
-            ctx.fillStyle = `rgba(255, 235, 59, ${p.opacity})`;
-            ctx.beginPath(); ctx.arc(p.x, p.y, 1, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(xStart - b.width/2, 0);
+        ctx.lineTo(xStart + b.width/2, 0);
+        ctx.lineTo(xEnd + b.width*2, height);
+        ctx.lineTo(xEnd - b.width*2, height);
+        ctx.fill();
+        b.x += b.speed;
+        b.opacity += (Math.random() - 0.5) * 0.01;
+        if (b.x > width + 200 || b.x < -200 || b.opacity <= 0) {
+            b.x = Math.random() * width;
+            b.opacity = Math.random() * 0.1 + 0.05;
         }
     });
-}
-
-function drawNameTag(p) {
-    ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillRect(p.x - 40, p.y - 120, 80, 20);
-    ctx.fillStyle = '#fff';
-    ctx.font = '12px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText(p.author || 'Anon', p.x, p.y - 106);
     ctx.restore();
 }
 

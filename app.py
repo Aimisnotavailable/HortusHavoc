@@ -63,6 +63,7 @@ print(f"Server loaded {len(GLOBAL_PLANTS)} plants from {DB_FILE}")
 def update_weather_logic():
     global current_weather, last_weather_change, env_state
     
+    # 1. Random Weather Change
     if admin_override["weather"]:
         current_weather = admin_override["weather"]
     else:
@@ -74,21 +75,28 @@ def update_weather_logic():
 
     w = current_weather
     
-    # Simple Physics Simulation
+    # 2. Snow Logic
     if "snow" in w or "blizzard" in w:
         rate = 0.002 if "blizzard" in w else 0.0005
         env_state["snow_level"] = min(1.0, env_state["snow_level"] + rate)
     elif "sunny" in w:
-        env_state["snow_level"] = max(0.0, env_state["snow_level"] - 0.001)
+        env_state["snow_level"] = max(0.0, env_state["snow_level"] - 0.001) # Fast melt
     else:
-        env_state["snow_level"] = max(0.0, env_state["snow_level"] - 0.0002)
+        env_state["snow_level"] = max(0.0, env_state["snow_level"] - 0.0002) # Slow melt
 
+    # 3. Puddle Logic (FIXED)
     if "rain" in w or "storm" in w:
         rate = 0.005 if "storm" in w else 0.001
         env_state["puddle_level"] = min(1.0, env_state["puddle_level"] + rate)
+        # Rain melts snow fast
         env_state["snow_level"] = max(0.0, env_state["snow_level"] - 0.002)
-    elif "sunny" in w:
-        env_state["puddle_level"] = max(0.0, env_state["puddle_level"] - 0.001)
+    else:
+        # FIX: Dry out puddles for ANY weather that isn't rain (Wind, Sun, Clouds)
+        # Wind dries faster than still air
+        dry_rate = 0.002 if ("breeze" in w or "gale" in w or "dust" in w) else 0.0005
+        if "sunny" in w: dry_rate = 0.001
+        
+        env_state["puddle_level"] = max(0.0, env_state["puddle_level"] - dry_rate)
 
 # --- ROUTES ---
 

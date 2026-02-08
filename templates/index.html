@@ -2,9 +2,23 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Draw A Garden</title>
     <link rel="stylesheet" href="src/styles.css">
+    <style>
+        /* NUCLEAR MOBILE FIX: Prevents "Rubber Band" scrolling on iOS */
+        html, body { 
+            width: 100%; height: 100%; 
+            margin: 0; padding: 0;
+            overflow: hidden; 
+            position: fixed; 
+            background: #000; 
+            touch-action: none;
+            -webkit-user-select: none; user-select: none;
+            font-family: 'Segoe UI', sans-serif;
+            color: #e0e0e0;
+        }
+    </style>
 </head>
 <body>
     <div id="game-container">
@@ -15,58 +29,67 @@
                 <div class="panel">
                     <span id="ui-time-icon" class="panel-icon">☀️</span> 
                     <span id="ui-time-text">12:00</span>
-                </div>
-                <div class="panel">
-                    <span class="panel-label">Weather:</span>
-                    <span id="ui-weather">Clear</span>
-                </div>
-                <div class="panel">
-                    <span class="panel-label">Wind:</span>
-                    <span id="ui-wind-speed">0</span> km/h 
-                    <span id="ui-wind-arrow" style="display:inline-block; transform-origin: center;">➡</span>
-                </div>
-                <div class="panel">🌱 <span id="ui-plant-count">0</span></div>
-                <div class="panel">
-                    👤 <input type="text" id="username" value="Guest" 
-                       style="background:transparent; border:none; color:var(--accent); width:80px; font-weight:bold; outline:none;">
-                </div>
-            </div>
-
-            <div id="editor-modal">
-                <h3 style="margin-top:0; color:var(--accent)">Botanist's Bench</h3>
+                    <span style="opacity:0.5; margin:0 5px;">|</span>
+                    <span id="ui-weather">Clear</span> </div>
                 
-                <div class="tabs" id="layer-controls">
-                    <button class="tab-btn active" id="btn-layer-stem" onclick="window.editor.setLayer('stem')">1. Stem</button>
-                    <button class="tab-btn" id="btn-layer-leaves" onclick="window.editor.setLayer('leaves')">2. Leaf</button>
-                    <button class="tab-btn" id="btn-layer-flower" onclick="window.editor.setLayer('flower')">3. Flower</button>
+                <div class="panel">
+                    💨 <span id="ui-wind-speed">0</span>
+                    <span id="ui-wind-arrow" style="display:inline-block; transition: transform 0.5s;">➡</span>
                 </div>
 
-                <div class="canvas-stack-container">
-                    <canvas id="canvas-stem" class="layer-canvas active" width="200" height="400"></canvas>
-                    <canvas id="canvas-leaves" class="layer-canvas inactive" width="200" height="400"></canvas>
-                    <canvas id="canvas-flower" class="layer-canvas inactive" width="200" height="400"></canvas>
+                <div class="panel" title="Environment">
+                    💧 <span id="ui-puddle">0%</span>
+                    ❄️ <span id="ui-snow">0%</span>
                 </div>
 
-                <div class="editor-controls">
-                    <div class="control-row">
-                        <span class="control-label">Color</span>
-                        <input type="color" id="editor-color" value="#4caf50">
-                    </div>
-                    <div class="control-row">
-                        <span class="control-label">Size</span>
-                        <input type="range" id="editor-size" min="1" max="40" value="10">
-                        <span id="size-display" style="font-size: 11px; width: 30px; text-align: right; color:#888;">10px</span>
-                    </div>
+                <div class="panel" title="Light Beam Intensity">
+                    ✨ <span id="ui-beams">0%</span>
                 </div>
 
-                <div class="actions">
-                    <button class="btn-danger" id="btn-cancel">Cancel</button>
-                    <button class="btn-danger" id="btn-clear" style="font-size: 0.8em">Clear Layer</button>
-                    <button class="btn-primary" id="btn-save">PLANT!</button>
-                </div>
+                <div class="panel">🌱 <span id="ui-plant-count">0</span></div>
             </div>
         </div>
     </div>
+
+    <div id="editor-modal" class="modal-overlay">
+        <div class="editor-panel">
+            <div style="text-align: center; margin-bottom: 5px;">
+                <h3>New Plant</h3>
+                <input type="text" id="username" placeholder="Your Name" value="Guest" 
+                       style="background:#333; border:1px solid #555; color:white; padding:5px; border-radius:4px; text-align:center;">
+            </div>
+
+            <div class="layer-tabs">
+                <button class="tab stem active" id="btn-layer-stem">Stem</button>
+                <button class="tab leaves" id="btn-layer-leaves">Leaves</button>
+                <button class="tab flower" id="btn-layer-flower">Flower</button>
+            </div>
+
+            <div class="canvas-stack-container">
+                <canvas id="canvas-stem" class="layer-canvas active" width="200" height="400"></canvas>
+                <canvas id="canvas-leaves" class="layer-canvas inactive" width="200" height="400"></canvas>
+                <canvas id="canvas-flower" class="layer-canvas inactive" width="200" height="400"></canvas>
+            </div>
+
+            <div class="editor-controls">
+                <div class="control-row">
+                    <span class="control-label">Color</span>
+                    <input type="color" id="editor-color" value="#4caf50">
+                </div>
+                <div class="control-row">
+                    <span class="control-label">Size</span>
+                    <input type="range" id="editor-size" min="1" max="40" value="10">
+                </div>
+            </div>
+
+            <div class="actions">
+                <button class="btn-danger" id="btn-cancel">Cancel</button>
+                <button class="btn-danger" id="btn-clear">Clear</button>
+                <button class="btn-primary" id="btn-save">PLANT!</button>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="src/main.js"></script>
 </body>
 </html>
