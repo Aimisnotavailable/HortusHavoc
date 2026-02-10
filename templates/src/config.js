@@ -1,18 +1,19 @@
 export const CONFIG = {
-    // FIX: Use relative path (starts with /). 
-    // This avoids the "http:localhost" typo and works on any IP.
     API_URL: '/api', 
-    
     POLL_INTERVAL: 2000,
     GRASS_COUNT: 8000,
     CANVAS_SIZE: 200,
-
-    // Time Scale: 1 real sec = 10 game sec
     GAME_TIME_SCALE: 10, 
-
-    // Growth: 5000ms to fully grow
     GROWTH_DURATION: 5000,
     
+    // Plant Stats
+    BASE_HP: 100,
+    REGEN_TICK_MS: 1000, // Regenerate every 1 second
+    STATS: {
+        VIT: { label: "Vitality", baseRegen: 0.5 }, // HP per tick
+        STR: { label: "Strength", basePower: 1.0 }
+    },
+
     COLORS: ['#1e361a', '#2d4c1e', '#4a6b2f', '#638235', '#789440', '#8f9e53'],
 
     SKY_COLORS: {

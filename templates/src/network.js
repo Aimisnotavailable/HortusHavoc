@@ -18,40 +18,48 @@ export function uploadPlant(plantData) {
 
 // --- 2. POLL UPDATES ---
 export function pollUpdates() {
-    const lastTime = (typeof STATE.lastServerTime === 'number') ? STATE.lastServerTime : 0;
+    // We can ignore 'since' for plants now, but keep it for other potential optimizations
+    const lastTime = STATE.lastServerTime || 0;
 
     fetch(`${CONFIG.API_URL}/updates?since=${lastTime}`)
         .then(res => res.json())
         .then(data => {
-            // A. Sync Plants
-            console.log("Polling updates... Received:", data);
-            if(data.plants && data.plants.length > 0) {
-                const existingIds = new Set(STATE.plants.map(p => p.id));
-                const uniqueNew = data.plants.filter(p => !existingIds.has(p.id));
+            if(data.plants) {
+                const serverIds = new Set(data.plants.map(p => p.id));
                 
-                if (uniqueNew.length > 0) {
-                    STATE.plants.push(...uniqueNew);
-                    // OPTIMIZATION: Sort ONCE when data arrives, not every frame
-                    STATE.plants.sort((a,b) => a.y - b.y);
-                    
-                    // Update HUD count
-                    const countEl = document.getElementById('plant-count');
-                    if(countEl) countEl.innerText = STATE.plants.length;
+                // 1. DELETE: Remove plants not present in the server list
+                for (let i = STATE.plants.length - 1; i >= 0; i--) {
+                    if (!serverIds.has(STATE.plants[i].id)) {
+                        console.log(`💀 Plant ${STATE.plants[i].id} died. Removing.`);
+                        STATE.plants.splice(i, 1);
+                    }
                 }
-            }
 
-            // B. Sync Time
-            if(data.server_time) {
-                STATE.lastServerTime = data.server_time;
+                // 2. ADD / UPDATE
+                data.plants.forEach(incoming => {
+                    const existing = STATE.plants.find(p => p.id === incoming.id);
+                    if (existing) {
+                        // Update stats
+                        existing.stats = incoming.stats;
+                    } else {
+                        // Add new
+                        STATE.plants.push(incoming);
+                    }
+                });
+                
+                // 3. Sort for depth
+                STATE.plants.sort((a,b) => a.y - b.y);
             }
+            
+            // B. Sync Time
+            if(data.server_time) STATE.lastServerTime = data.server_time;
             
             // C. Sync Weather
             if(data.weather && data.weather !== STATE.currentWeather) {
-                console.log(`Weather Update: ${data.weather}`);
                 STATE.currentWeather = data.weather;
             }
 
-            // D. Sync Environment (Snow/Puddles)
+            // D. Sync Environment
             if(data.env) {
                 if(typeof data.env.snow_level === 'number') STATE.world.snowLevel = data.env.snow_level;
                 if(typeof data.env.puddle_level === 'number') STATE.world.puddleLevel = data.env.puddle_level;
@@ -59,7 +67,24 @@ export function pollUpdates() {
         })
         .catch(err => console.error("Polling error:", err))
         .finally(() => {
-            // CRITICAL FIX: Schedule the next poll regardless of success/fail
             setTimeout(pollUpdates, CONFIG.POLL_INTERVAL);
         });
+}
+
+export function protectPlant(plantId) {
+    console.log(`🛡️ Shielding plant ${plantId}...`);
+    fetch(`${CONFIG.API_URL}/plant/protect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: plantId })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if(data.success) {
+            console.log("Shield Active!");
+            pollUpdates(); // Get the new status immediately
+        } else {
+            console.warn(data.error);
+        }
+    });
 }

@@ -18,6 +18,7 @@ CORS(app)
 # --- STATE ---
 DB_FILE = 'global_plants.json'
 GLOBAL_PLANTS = []
+last_disk_save = 0
 
 # Admin Overrides
 admin_override = {
@@ -39,6 +40,9 @@ env_state = {
     "snow_level": 0.0,
     "puddle_level": 0.0
 }
+
+LAST_TICK_TIME = time.time()
+NEXT_PLANT_ID = 1
 
 def load_plants():
     if os.path.exists(DB_FILE):
@@ -98,6 +102,68 @@ def update_weather_logic():
         
         env_state["puddle_level"] = max(0.0, env_state["puddle_level"] - dry_rate)
 
+def update_world_physics():
+    global LAST_TICK_TIME, GLOBAL_PLANTS
+    now = time.time()
+    dt = now - LAST_TICK_TIME
+    LAST_TICK_TIME = now
+
+    state_changed = False 
+    is_stormy = current_weather in ['storm', 'blizzard', 'tornado', 'hail']
+    
+    # 1. REMOVE DEAD PLANTS (Garbage Collection)
+    # If a plant has been dead for more than 10 seconds, delete it forever.
+    # This gives clients time to play the "Death Animation".
+    initial_count = len(GLOBAL_PLANTS)
+    GLOBAL_PLANTS = [
+        p for p in GLOBAL_PLANTS 
+        if not (p.get('stats', {}).get('dead', False) and 
+                now - p['stats'].get('death_time', 0) > 10)
+    ]
+    if len(GLOBAL_PLANTS) != initial_count:
+        state_changed = True
+
+    for p in GLOBAL_PLANTS:
+        if 'stats' not in p:
+            p['stats'] = {"hp": 100.0, "maxHp": 100.0, "vit": 1.0}
+            state_changed = True
+        
+        s = p['stats']
+        
+        # Skip logic if already dead
+        if s.get('dead', False): continue
+
+        # 2. CHECK PROTECTION
+        # If protection is active, SKIP DAMAGE
+        is_protected = s.get('protect_until', 0) > now
+        
+        # 3. APPLY DAMAGE
+        if is_stormy and not is_protected:
+            damage = 5.0 * dt
+            s['hp'] = max(0.0, float(s['hp']) - damage)
+            
+            # DEATH EVENT
+            if s['hp'] <= 0.0:
+                s['hp'] = 0.0
+                s['dead'] = True
+                s['death_time'] = now # Mark time of death
+                s['death_cause'] = current_weather # Record cause for animation
+                state_changed = True
+                continue 
+        
+        # 4. REGEN (Only if not stormy and not fully healed)
+        elif not is_stormy and s['hp'] < s['maxHp']:
+            regen = (1.5 * float(s['vit'])) * dt
+            s['hp'] = min(float(s['maxHp']), s['hp'] + regen)
+
+        # Dirty Check (Save if HP changed significantly)
+        if abs(s['hp'] - s.get('last_saved_hp', 0)) > 0.5:
+            s['last_saved_hp'] = s['hp']
+            state_changed = True
+
+    if state_changed:
+        save_plants()
+        
 # --- ROUTES ---
 
 @app.route('/')
@@ -118,41 +184,65 @@ def serve_static(path):
 # --- API ---
 
 @app.route('/api/plant', methods=['POST'])
-def add_plant():
+def plant_seed():
+    global NEXT_PLANT_ID # Use global counter
     data = request.json
-    if not data: return jsonify({"error": "No data provided"}), 400
-
+    
+    # FIX: Use a monotonic counter, not len(), to avoid ID reuse after death
+    new_id = NEXT_PLANT_ID
+    NEXT_PLANT_ID += 1
+    
     new_plant = {
-        "id": len(GLOBAL_PLANTS) + 1,
+        "id": new_id,
         "x": data.get('x', 0),
         "y": data.get('y', 0),
         "stemTex": data.get('stemTex', ''),
         "leafTex": data.get('leafTex', ''),
         "flowerTex": data.get('flowerTex', ''),
         "author": data.get('author', 'Anonymous'),
+        "stats": {"hp": 100.0, "maxHp": 100.0, "vit": 1.0, "dead": False}, # Init stats immediately
         "server_time": time.time() * 1000
     }
     GLOBAL_PLANTS.append(new_plant)
     save_plants()
     return jsonify(new_plant)
 
+@app.route('/api/plant/protect', methods=['POST'])
+def protect_plant():
+    data = request.json
+    plant_id = data.get('id')
+    now = time.time()
+    
+    for p in GLOBAL_PLANTS:
+        if p['id'] == plant_id:
+            s = p['stats']
+            # If already dead, cannot protect
+            if s.get('dead', False):
+                 return jsonify({"error": "Too late, plant is dead."}), 400
+            
+            # Apply 60 seconds of protection
+            s['protect_until'] = now + 60 
+            save_plants()
+            return jsonify({"success": True, "protect_until": s['protect_until']})
+            
+    return jsonify({"error": "Plant not found"}), 404
+
 @app.route('/api/updates', methods=['GET'])
 def get_updates():
+    # 1. RUN PHYSICS! (Critical: Plants won't die without this)
+    update_world_physics()
     update_weather_logic()
     
     current_time = (time.time() + (admin_override["time_offset"] * 3600)) * 1000
-    try:
-        since = float(request.args.get('since', 0))
-    except:
-        since = 0.0
-        
-    new_plants = [p for p in GLOBAL_PLANTS if p.get('server_time', 0) > since]
     
+    # 2. IGNORE 'SINCE' FOR PLANTS
+    # Always return the FULL list so the client knows what was deleted.
+    # We only send basic stats to keep it light if you want, but sending full obj is safer.
     return jsonify({
         "time": current_time,
         "weather": current_weather,
         "env": env_state,
-        "plants": new_plants
+        "plants": GLOBAL_PLANTS # <--- ALWAYS SEND ALL PLANTS
     })
 
 @app.route('/api/admin/update', methods=['POST'])

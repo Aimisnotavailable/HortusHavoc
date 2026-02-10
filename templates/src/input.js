@@ -1,5 +1,6 @@
 import { STATE } from './state.js';
 import { openEditor } from './editor.js';
+import { protectPlant } from './network.js'; // Changed import
 
 export function initInput() {
     console.log("[System] Initializing Input...");
@@ -24,5 +25,16 @@ export function initInput() {
 
         // Open the editor at these coordinates
         openEditor(e.clientX, e.clientY);
+    });
+
+    window.addEventListener('mousedown', (e) => {
+        if (e.target.id !== 'gameCanvas') return;
+
+        if (STATE.hoveredPlant) {
+            // New Action: Protect!
+            protectPlant(STATE.hoveredPlant.id);
+            return;
+        }
+        // ... open editor logic ...
     });
 }

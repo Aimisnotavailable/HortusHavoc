@@ -4,7 +4,7 @@ import { AUDIO } from './audio.js';
 
 let canvas, ctx;
 let width, height;
-
+let lastRegenTick = 0;
 // --- VISUAL STATE ---
 const visualState = { 
     puddleLevel: 0, 
@@ -35,6 +35,27 @@ const lerpColorHex = (a, b, amount) => {
 
     return '#' + ((1 << 24) + (rr << 16) + (rg << 8) + (rb | 0)).toString(16).slice(1);
 };
+
+// Add this helper at the top
+function getHealthColor(hexColor, hpPercent) {
+    if (hpPercent >= 1.0) return hexColor; // Healthy = Normal Color
+
+    // Parse Hex to RGB
+    const r = parseInt(hexColor.slice(1, 3), 16);
+    const g = parseInt(hexColor.slice(3, 5), 16);
+    const b = parseInt(hexColor.slice(5, 7), 16);
+
+    // Target "Dead" Color (Brownish Grey: #8b7765)
+    const deadR = 139, deadG = 119, deadB = 101;
+
+    // Mix current color with dead color based on HP
+    const mix = 1.0 - hpPercent; 
+    const newR = Math.floor(r * (1 - mix) + deadR * mix);
+    const newG = Math.floor(g * (1 - mix) + deadG * mix);
+    const newB = Math.floor(b * (1 - mix) + deadB * mix);
+
+    return `rgb(${newR}, ${newG}, ${newB})`;
+}
 
 // --- UI REFS ---
 const uiElements = {
@@ -139,8 +160,64 @@ function spawnBeam(randomStart = false) {
 function loop() {
     const now = Date.now();
     updatePhysics(now);
+    updatePlants(now); // New update phase
+    updateHoverState(); // Run before drawing UI
+    updateTooltip();
     draw(now);
     requestAnimationFrame(loop);
+}
+
+function updateHoverState() {
+    const mouse = STATE.mouse;
+    // Find plant under mouse with a 30px hit-area
+    STATE.hoveredPlant = STATE.plants.find(p => {
+        const dx = p.x - mouse.x;
+        const dy = (p.y - 20) - mouse.y; // Offset for plant height
+        return Math.sqrt(dx*dx + dy*dy) < 30;
+    });
+}
+
+
+function updatePlants(now) {
+    const delta = now - lastRegenTick;
+    const shouldRegen = delta >= CONFIG.REGEN_TICK_MS;
+
+    STATE.plants.forEach(p => {
+        // 1. Initialize stats if they don't exist (for older saves)
+        if (!p.stats) {
+            p.stats = { 
+                hp: CONFIG.BASE_HP, 
+                maxHp: CONFIG.BASE_HP, 
+                vit: 1 
+            };
+        }
+
+        // 2. Regeneration Logic
+        if (shouldRegen && p.stats.hp < p.stats.maxHp) {
+            const regenAmount = CONFIG.STATS.VIT.baseRegen * p.stats.vit;
+            p.stats.hp = Math.min(p.stats.maxHp, p.stats.hp + regenAmount);
+        }
+    });
+
+    if (shouldRegen) lastRegenTick = now;
+}
+
+function updateTooltip() {
+    const tooltip = document.getElementById('plant-tooltip');
+    if (STATE.hoveredPlant) {
+        const p = STATE.hoveredPlant;
+        const stats = p.stats || { hp: 100, maxHp: 100, vit: 1 };
+        
+        document.getElementById('tooltip-author').innerText = p.author;
+        document.getElementById('tooltip-hp').innerText = `${Math.floor(stats.hp)} / ${stats.maxHp}`;
+        document.getElementById('tooltip-vit').innerText = stats.vit;
+        
+        tooltip.style.display = 'block';
+        tooltip.style.left = (STATE.mouse.x + 15) + 'px';
+        tooltip.style.top = (STATE.mouse.y + 15) + 'px';
+    } else {
+        tooltip.style.display = 'none';
+    }
 }
 
 function updatePhysics(now) {
@@ -359,13 +436,9 @@ function draw(now) {
     drawSplashes();
     drawAtmosphere();
 
-    // Draw Name Tag LAST (On Top)
-    if (STATE.hoveredPlant) {
-        drawNameTag(STATE.hoveredPlant);
-    }
 }
-
 function drawPlant(p, rotation, age) {
+    // 1. ASSET CHECKS
     const stemImg = getImage(p.stemTex);
     const leafImg = getImage(p.leafTex);
     const flowerImg = getImage(p.flowerTex);
@@ -373,16 +446,75 @@ function drawPlant(p, rotation, age) {
     const isReady = (img) => img && img.complete && img.naturalWidth > 0;
     if (!isReady(stemImg) || !isReady(leafImg) || !isReady(flowerImg)) return;
 
+    // 2. CONSTANTS & SETUP
     const SCALE = 0.5;
     const w = 200 * SCALE;
     const h = 400 * SCALE;
     const growthDuration = CONFIG.GROWTH_DURATION || 5000;
     const progress = Math.min(1.0, age / growthDuration);
 
+    // Stats Setup
+    const stats = p.stats || { hp: 100, maxHp: 100, dead: false };
+    const hpPercent = Math.max(0, stats.hp / stats.maxHp);
+    const isProtected = (stats.protect_until || 0) > (Date.now() / 1000);
+
     ctx.save();
+
+    // 3. MOVE TO PLANT BASE
     ctx.translate(p.x, p.y);
+
+    // --- [NEW] DEATH ANIMATIONS ---
+    // If dead, apply transforms (spin, fly away, etc.) BEFORE drawing
+    if (stats.dead) {
+        const timeSinceDeath = (Date.now() / 1000) - (stats.death_time || 0);
+        
+        if (stats.death_cause === 'tornado' || stats.death_cause === 'storm') {
+            // Wind: Fly up/right and spin
+            const windForce = timeSinceDeath * 50;
+            ctx.translate(windForce, -windForce * 0.5); 
+            ctx.rotate(timeSinceDeath * 5); 
+            ctx.globalAlpha = Math.max(0, 1 - timeSinceDeath * 0.5);
+        } else if (stats.death_cause === 'snow' || stats.death_cause === 'blizzard') {
+            // Cold: Freeze white
+            ctx.filter = `brightness(${1 + timeSinceDeath}) grayscale(1)`;
+            ctx.globalAlpha = Math.max(0, 1 - timeSinceDeath * 0.3);
+        } else {
+            // Generic: Wither/Shrink
+            ctx.scale(1, Math.max(0, 1 - timeSinceDeath * 0.2)); 
+            ctx.filter = 'grayscale(1) brightness(0.2)'; 
+            ctx.globalAlpha = Math.max(0, 1 - timeSinceDeath * 0.2);
+        }
+    }
+
+    // --- [NEW] VISUAL WITHERING ---
+    // If alive but damaged, turn brown/sepia
+    if (!stats.dead && hpPercent < 1.0) {
+        const dmg = 1.0 - hpPercent;
+        ctx.filter = `sepia(${dmg}) grayscale(${dmg * 0.5})`; 
+    }
+
+    // --- [NEW] SHIELD VISUAL ---
+    if (isProtected && !stats.dead) {
+        ctx.save();
+        ctx.shadowColor = '#00bfff';
+        ctx.shadowBlur = 20;
+        ctx.strokeStyle = 'rgba(0, 191, 255, 0.6)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        // Draw bubble centered slightly up from the base
+        ctx.arc(0, -60, 50, 0, Math.PI * 2);
+        ctx.stroke();
+        // Subtle pulse fill
+        ctx.fillStyle = `rgba(0, 191, 255, ${0.1 + Math.sin(Date.now() / 200) * 0.05})`;
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // 4. DRAW PLANT LAYERS
+    // Apply sway rotation
     ctx.rotate(rotation);
 
+    // Draw Shadow (Local coords 0,0)
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
     ctx.ellipse(0, 0, w/3, w/6, 0, 0, Math.PI*2);
@@ -399,23 +531,39 @@ function drawPlant(p, rotation, age) {
         drawLayer(ctx, flowerImg, w, h, (progress - 0.5) / 0.5, applySnow);
     }
 
+    // Reset rotation so UI doesn't spin with the plant sway
     ctx.rotate(-rotation);
     
-    // Hover Detection
-    if (Math.abs(STATE.mouse.x - p.x) < 40 && STATE.mouse.y < p.y && STATE.mouse.y > p.y - 150) {
+    // Reset filters so the Health Bar isn't brown/sepia
+    ctx.filter = 'none'; 
+
+    // 5. HOVER DETECTION
+    // We use Global Coordinates for mouse check (p.x is global, mouse is global)
+    // The previous translate() affects DRAWING, not the variables p.x/p.y
+    if (Math.abs(STATE.mouse.x - p.x) < 40 && 
+        STATE.mouse.y < p.y && 
+        STATE.mouse.y > p.y - 150) {
         STATE.hoveredPlant = p;
     }
-    ctx.restore();
-}
+    
+    // 6. DRAW HEALTH BAR
+    // Drawn relative to the origin (which is now at p.x, p.y)
+    // Only show if damaged and NOT playing a death animation
+    if (!stats.dead && hpPercent < 0.99) {
+        // Background (Black)
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(-20, -70, 40, 6); 
+        
+        // HP Bar (Green to Red gradient logic)
+        ctx.fillStyle = hpPercent > 0.3 ? '#4caf50' : '#f44336';
+        ctx.fillRect(-20, -70, 40 * hpPercent, 6);
+        
+        // Border
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(-20, -70, 40, 6);
+    }
 
-function drawNameTag(p) {
-    ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.8)';
-    ctx.fillRect(p.x - 50, p.y - 130, 100, 24);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 14px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText(p.author || 'Anon', p.x, p.y - 113);
     ctx.restore();
 }
 
