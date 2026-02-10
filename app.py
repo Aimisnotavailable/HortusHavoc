@@ -268,7 +268,6 @@ def get_updates():
     update_weather_logic()
     
     current_time = (time.time() + (admin_override["time_offset"] * 3600)) * 1000
-    
     return jsonify({
         "time": current_time,
         "weather": current_weather,
@@ -283,6 +282,7 @@ def admin_update():
     if 'weather' in data:
         admin_override['weather'] = data['weather']
     if 'time_offset' in data:
+        print(f"Admin set time offset to {data['time_offset']} hours")
         admin_override['time_offset'] = data['time_offset']
     return jsonify({"status": "ok", "overrides": admin_override})
 

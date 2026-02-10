@@ -3,59 +3,182 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Garden Admin Panel</title>
+    <title>Draw A Garden | Control Panel</title>
     <style>
-        body { font-family: monospace; background: #1a1a1a; color: #e0e0e0; padding: 20px; max-width: 600px; margin: 0 auto; }
-        h1 { border-bottom: 2px solid #4caf50; padding-bottom: 10px; }
-        .card { background: #2d2d2d; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        label { display: block; margin-bottom: 8px; font-weight: bold; color: #888; }
-        select, input, button { width: 100%; padding: 10px; margin-bottom: 15px; background: #1a1a1a; border: 1px solid #444; color: #fff; border-radius: 4px; }
-        button { background: #4caf50; border: none; cursor: pointer; font-weight: bold; transition: background 0.2s; }
-        button:hover { background: #45a049; }
-        button.secondary { background: #444; }
-        .status-box { padding: 10px; background: #000; border: 1px solid #333; font-size: 0.9em; margin-top: 10px; white-space: pre-wrap; }
-        .row { display: flex; gap: 10px; }
+        :root { 
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.15);
+            --glass-highlight: rgba(255, 255, 255, 0.4);
+            --glass-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+            --text-main: #ffffff;
+            --text-dim: rgba(255, 255, 255, 0.5);
+            --accent: #4caf50;
+        }
+
+        body { 
+            margin: 0; padding: 40px; 
+            background: radial-gradient(circle at center, #1a2f23 0%, #050505 100%);
+            font-family: 'Segoe UI', Roboto, sans-serif; 
+            color: var(--text-main); 
+            min-height: 100vh;
+        }
+
+        h1 {
+            text-align: center; font-weight: 200; letter-spacing: 4px;
+            text-transform: uppercase; margin-bottom: 40px;
+            text-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
+        }
+
+        /* --- LAYOUT GRID --- */
+        .admin-grid {
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
+            gap: 25px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        /* --- LIQUID GLASS CARD --- */
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px) saturate(150%);
+            -webkit-backdrop-filter: blur(20px) saturate(150%);
+            border: 1px solid var(--glass-border);
+            border-top: 1px solid var(--glass-highlight);
+            border-radius: 24px;
+            padding: 25px;
+            box-shadow: var(--glass-shadow);
+            transition: transform 0.2s;
+        }
+        
+        .glass-card:hover { transform: translateY(-5px); border-color: rgba(255,255,255,0.3); }
+
+        h3 { 
+            margin-top: 0; font-size: 14px; text-transform: uppercase; 
+            color: var(--text-dim); letter-spacing: 1px; border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 10px; margin-bottom: 20px;
+        }
+
+        /* --- CONTROLS --- */
+        label { display: block; margin-bottom: 8px; font-size: 13px; font-weight: 600; color: #ccc; }
+
+        input, select {
+            width: 100%; padding: 12px; margin-bottom: 15px; box-sizing: border-box;
+            background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px; color: white; font-family: inherit;
+            transition: 0.2s;
+        }
+        
+        /* Specific style for dropdown options */
+        select option {
+            background: #1a1a1a;
+            color: white;
+            padding: 10px;
+        }
+
+        input:focus, select:focus { 
+            outline: none; border-color: var(--accent); background: rgba(0,0,0,0.5); 
+            box-shadow: 0 0 15px rgba(76, 175, 80, 0.2);
+        }
+
+        /* --- GLASS BUTTONS --- */
+        button {
+            width: 100%; padding: 14px;
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 12px;
+            background: rgba(255,255,255,0.05);
+            color: white; font-weight: 700; text-transform: uppercase; font-size: 11px; letter-spacing: 1px;
+            cursor: pointer; transition: 0.2s; backdrop-filter: blur(5px);
+            margin-bottom: 10px;
+        }
+
+        button:hover { 
+            background: rgba(255,255,255,0.15); 
+            transform: translateY(-2px); 
+            border-color: white; 
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        .btn-primary { 
+            background: linear-gradient(135deg, rgba(76, 175, 80, 0.3), rgba(46, 125, 50, 0.3)); 
+            border-color: #4caf50; 
+        }
+        .btn-primary:hover { background: #4caf50; box-shadow: 0 0 20px rgba(76, 175, 80, 0.6); }
+
+        .btn-danger { color: #ff8888; border-color: rgba(255, 80, 80, 0.3); }
+        .btn-danger:hover { background: rgba(255, 50, 50, 0.2); color: white; }
+
+        /* --- LIVE MONITOR --- */
+        #status-output {
+            font-family: 'Consolas', monospace; font-size: 12px; color: #00ff88;
+            background: rgba(0,0,0,0.5); padding: 15px; border-radius: 12px;
+            border: 1px solid rgba(0, 255, 136, 0.2);
+            white-space: pre-wrap; line-height: 1.6;
+        }
     </style>
 </head>
 <body>
-    <h1>🔧 Garden Control</h1>
 
-    <div class="card">
-        <label>Force Weather Event</label>
-        <div class="row">
+    <h1>Garden Control</h1>
+
+    <div class="admin-grid">
+        
+        <div class="glass-card">
+            <h3>Atmosphere Control</h3>
+            <label>Weather Condition</label>
             <select id="weather-select">
-                <option value="">-- Release Override (Auto) --</option>
-                {% for w in weather_types %}
-                <option value="{{ w }}">{{ w|capitalize }}</option>
-                {% endfor %}
+                <option value="">-- Let Nature Decide --</option>
+                <optgroup label="Standard">
+                    <option value="sunny">☀️ Sunny</option>
+                    <option value="cloudy">☁️ Cloudy</option>
+                    <option value="breeze">🍃 Breeze</option>
+                    <option value="rain">🌧️ Rain</option>
+                    <option value="storm">⛈️ Storm</option>
+                    <option value="gale">💨 Gale</option>
+                </optgroup>
+                <optgroup label="Cold">
+                    <option value="snow">🌨️ Snow</option>
+                    <option value="blizzard">❄️ Blizzard</option>
+                    <option value="hail">☄️ Hail</option>
+                    <option value="fog">🌫️ Fog</option>
+                </optgroup>
+                <optgroup label="Extreme / Rare">
+                    <option value="tornado">🌪️ Tornado</option>
+                    <option value="dust_storm">🏜️ Dust Storm</option>
+                    <option value="volcanic_ash">🌋 Volcanic Ash</option>
+                    <option value="meteor_shower">🌠 Meteor Shower</option>
+                    <option value="aurora_borealis">🌌 Aurora</option>
+                </optgroup>
             </select>
-            <button onclick="setWeather()" style="width: auto;">Apply</button>
+            <button class="btn-primary" onclick="setWeather()">Deploy Weather</button>
         </div>
-    </div>
 
-    <div class="card">
-        <label>Time Offset (Hours)</label>
-        <p style="font-size: 0.8em; color: #aaa; margin-top: -5px;">Positive = Future, Negative = Past</p>
-        <div class="row">
-            <input type="number" id="time-offset" value="0" step="1">
-            <button onclick="setTime()" style="width: auto;">Set</button>
-            <button onclick="resetTime()" class="secondary" style="width: auto;">Reset</button>
+        <div class="glass-card">
+            <h3>Temporal Shift</h3>
+            <label>Time Offset (Hours)</label>
+            <input type="number" id="time-offset" placeholder="0" step="0.5">
+            <button class="btn-primary" onclick="setTime()">Shift Time</button>
+            <button class="btn-danger" onclick="resetTime()">Sync with Server</button>
         </div>
-    </div>
 
-    <div class="card">
-        <label>Live Server Status</label>
-        <button onclick="refreshStatus()">Refresh Now</button>
-        <div id="status-output" class="status-box">Loading...</div>
+        <div class="glass-card">
+            <h3>Live Telemetry</h3>
+            <div id="status-output">Connecting to Garden...</div>
+            <br>
+            <button onclick="refreshStatus()">Force Refresh</button>
+            <button class="btn-danger" onclick="wipePlants()">🔥 Wipe All Plants</button>
+        </div>
+
     </div>
 
     <script>
+        const API_URL = location.origin + '/api';
+
         function setWeather() {
             const w = document.getElementById('weather-select').value;
-            // Send empty string to clear override (Python treats empty string as None-ish if handled, or we send null)
+            // Send null if empty to reset to auto-weather
             const payload = { weather: w === "" ? null : w };
             
-            fetch('/api/admin/update', {
+            fetch(`${API_URL}/admin/update`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(payload)
@@ -64,7 +187,7 @@
 
         function setTime() {
             const offset = document.getElementById('time-offset').value;
-            fetch('/api/admin/update', {
+            fetch(`${API_URL}/admin/update`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ time_offset: parseFloat(offset) })
@@ -76,23 +199,35 @@
             setTime();
         }
 
+        function wipePlants() {
+            if(!confirm("ARE YOU SURE? This will delete every plant in the garden.")) return;
+            // Warning: Backend endpoint required for this action
+            console.warn("Ensure /api/admin/wipe endpoint exists!");
+        }
+
         function refreshStatus() {
-            fetch('/api/updates')
+            fetch(`${API_URL}/updates`)
                 .then(r => r.json())
                 .then(data => {
+                    const timeStr = new Date(data.server_time || Date.now()).toLocaleTimeString();
+                    const snow = data.env ? (data.env.snow_level * 100).toFixed(1) : 0;
+                    const rain = data.env ? (data.env.puddle_level * 100).toFixed(1) : 0;
+                    const plants = data.plants ? data.plants.length : 0;
+                    const deaths = data.deaths || 0;
+
                     const output = 
-`Time:    ${new Date(data.time).toLocaleTimeString()}
-Weather: ${data.weather}
-Snow:    ${(data.env.snow_level * 100).toFixed(1)}%
-Puddles: ${(data.env.puddle_level * 100).toFixed(1)}%
-Plants:  ${data.plants.length}`;
+`Time:    ${timeStr}
+Weather: ${data.weather || "Clear"}
+Plants:  ${plants} Alive / ${deaths} Dead
+Snow:    ${snow}%
+Rain:    ${rain}%`;
                     document.getElementById('status-output').innerText = output;
                 });
         }
 
-        // Auto refresh every 2 seconds
-        refreshStatus();
+        // Auto refresh
         setInterval(refreshStatus, 2000);
+        refreshStatus();
     </script>
 </body>
 </html>

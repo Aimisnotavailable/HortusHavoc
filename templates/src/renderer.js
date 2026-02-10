@@ -158,6 +158,7 @@ function spawnBeam(randomStart = false) {
 // 2. MAIN LOOP
 // ==========================================
 function loop() {
+    
     const now = Date.now();
     updatePhysics(now);
     updatePlants(now); // New update phase
@@ -241,7 +242,7 @@ function updatePhysics(now) {
 
     const MS_PER_DAY = 24 * 60 * 60 * 1000; 
     const scale = CONFIG.GAME_TIME_SCALE || 10; 
-    const gameTimeMs = (now * scale) % MS_PER_DAY;
+    const gameTimeMs = (STATE.lastServerTime * scale) % MS_PER_DAY;
     timeOfDay = gameTimeMs / MS_PER_DAY; 
     const isNight = timeOfDay > 0.75 || timeOfDay < 0.25;
 
@@ -269,7 +270,7 @@ function updateUI(isNight, targetConfig) {
     
     // Wind Arrow
     if (uiElements.windSpeed && uiElements.windArrow) {
-        uiElements.windSpeed.innerText = Math.floor(Math.abs(STATE.physics.direction * STATE.physics.force) * 120);
+        uiElements.windSpeed.innerText = Math.floor(Math.abs(STATE.physics.direction * STATE.physics.force) * 120) + " km/h";
         let rot = 0;
         if (STATE.physics.direction < 0) rot = 180;
         uiElements.windArrow.style.transform = `rotate(${rot}deg)`;

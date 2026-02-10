@@ -60,8 +60,9 @@ export function pollUpdates() {
             }
 
             // B. Sync Time
-            if(data.server_time) STATE.lastServerTime = data.server_time;
-            
+            if(data.time) STATE.lastServerTime = data.time;
+
+            console.log("Time synced:", new Date(STATE.lastServerTime).toLocaleTimeString());
             // C. Sync Weather
             if(data.weather && data.weather !== STATE.currentWeather) {
                 STATE.currentWeather = data.weather;

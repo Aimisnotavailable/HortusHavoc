@@ -3,78 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Garden Sim: Atmosphere Edition</title>
+    <title>Draw A Garden</title>
     <link rel="stylesheet" href="src/styles.css">
     <style>
-        html, body { 
-            width: 100%; height: 100%; 
-            margin: 0; padding: 0;
-            overflow: hidden; 
-            position: fixed; 
-            background: #000; 
-            touch-action: none;
-            -webkit-user-select: none; user-select: none;
-            font-family: 'Segoe UI', sans-serif;
-            color: #e0e0e0;
-        }
+        /* CRITICAL: Ensure the game takes full screen */
+        html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #000; }
+        #game-container { position: relative; width: 100%; height: 100%; }
+        canvas { display: block; width: 100%; height: 100%; } 
     </style>
 </head>
 <body>
+
     <div id="game-container">
         <canvas id="gameCanvas"></canvas>
+
+        <div id="plant-tooltip" style="display: none; position: absolute; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 5px; border: 1px solid #4caf50; pointer-events: none; z-index: 100;">
+            <div id="tooltip-author" style="font-weight: bold; color: #4caf50;"></div>
+            <div style="font-size: 12px;">HP: <span id="tooltip-hp"></span></div>
+            <div style="font-size: 12px;">VIT: <span id="tooltip-vit"></span></div>
+        </div>
         
         <div id="ui-layer">
+            
             <div class="hud-bar">
-                <div class="panel">
-                    <span id="ui-time-icon" class="panel-icon">☀️</span> 
+                
+                <div class="glass-panel">
+                    <span id="ui-time-icon" class="icon">☀️</span> 
                     <span id="ui-time-text">12:00</span>
-                    <span style="opacity:0.5; margin:0 5px;">|</span>
+                    <span class="divider">|</span>
                     <span id="ui-weather">Clear</span>
                 </div>
-                
-                <div class="panel">
-                    💨 <span id="ui-wind-speed">0</span>
-                    <span id="ui-wind-arrow" style="display:inline-block; transition: transform 0.5s;">➡</span>
+
+                <div class="glass-panel">
+                    <div class="stat-item" title="Wind">
+                        <span class="icon">💨</span> <span id="ui-wind-speed">0</span>
+                        <span id="ui-wind-arrow" style="display:inline-block; transition: transform 0.5s;">➡</span>
+                    </div>
+                </div>
+                <div class="glass-panel stats row">
+                    <div class="stat-item" title="Light">
+                        <span class="icon">✨</span><span id="ui-beams">0%</span>
+                    </div>
+                    <div class="stat-item" title="Snow">
+                        <span class="icon">❄️</span> <span id="ui-snow">0%</span>
+                    </div>
+                    <div class="stat-item" title="Rain">
+                        <span class="icon">💧</span> <span id="ui-puddle">0%</span>
+                    </div>
                 </div>
 
-                <div class="panel" title="Environment">
-                    💧 <span id="ui-puddle">0%</span>
-                    ❄️ <span id="ui-snow">0%</span>
+                <div class="glass-panel life-pill">
+                    <div class="stat-item" title="Plants">
+                        <span class="icon">🌱</span> <span id="ui-plant-count">0</span>
+                    </div>
                 </div>
 
-                <div class="panel" title="Light Beam Intensity">
-                    ✨ <span id="ui-beams">0%</span>
-                </div>
-
-                <div class="panel" style="color: green;">🌱 PLANTS ALIVE:  <span id="ui-plant-count">0</span></div>
-                <div class="panel" style="color: #f44336;">💀 GRAVEYARD: <span id="ui-death-count">0</span></div>
-
-
-                <div class="panel">
-                    👤 <input type="text" id="username" value="Guest" 
-                       style="background:transparent; border:none; color:#4caf50; width:80px; font-weight:bold; text-align:center;"
-                       placeholder="Name">
+                <div class="glass-panel death-pill">
+                    <span class="icon">💀</span>
+                    <span id="ui-death-count">0</span>
                 </div>
             </div>
+
+            <div id="tooltip" class="glass-tooltip" style="display: none;"></div>
         </div>
-    </div>
 
-    <div id="plant-tooltip" style="display: none; position: absolute; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 5px; border: 1px solid #4caf50; pointer-events: none; z-index: 100;">
-        <div id="tooltip-author" style="font-weight: bold; color: #4caf50;"></div>
-        <div style="font-size: 12px;">HP: <span id="tooltip-hp"></span></div>
-        <div style="font-size: 12px;">VIT: <span id="tooltip-vit"></span></div>
-    </div>
-
-    <div id="editor-modal" class="modal-overlay">
-        <div class="editor-panel">
-            <div style="text-align: center; margin-bottom: 5px;">
-                <h3>New Plant</h3>
+        <div id="editor-modal">
+            <div class="editor-header">
+                <h2>✨ Plant Lab ✨</h2>
             </div>
 
-            <div class="layer-tabs">
-                <button class="tab stem active" id="btn-layer-stem">Stem</button>
-                <button class="tab leaves" id="btn-layer-leaves">Leaves</button>
-                <button class="tab flower" id="btn-layer-flower">Flower</button>
+            <div class="input-group">
+                <input type="text" id="username" placeholder="Gardener Name..." maxlength="12">
             </div>
 
             <div class="canvas-stack-container">
@@ -83,21 +82,27 @@
                 <canvas id="canvas-flower" class="layer-canvas inactive" width="200" height="400"></canvas>
             </div>
 
-            <div class="editor-controls">
-                <div class="control-row">
-                    <span class="control-label">Color</span>
+            <div class="layer-controls">
+                <button id="btn-layer-stem" class="btn-layer active" title="Stem"><span>🎋</span></button>
+                <button id="btn-layer-leaves" class="btn-layer" title="Leaves"><span>🍃</span></button>
+                <button id="btn-layer-flower" class="btn-layer" title="Flower"><span>🌺</span></button>
+            </div>
+
+            <div class="editor-tools">
+                <div class="tool-row">
+                    <label>Color</label>
                     <input type="color" id="editor-color" value="#4caf50">
                 </div>
-                <div class="control-row">
-                    <span class="control-label">Size</span>
-                    <input type="range" id="editor-size" min="1" max="40" value="10">
+                <div class="tool-row">
+                    <label>Size</label>
+                    <input type="range" id="editor-size" min="2" max="40" value="10">
                 </div>
             </div>
 
-            <div class="actions">
-                <button class="btn-danger" id="btn-cancel">Cancel</button>
-                <button class="btn-danger" id="btn-clear">Clear</button>
-                <button class="btn-primary" id="btn-save">PLANT!</button>
+            <div class="editor-actions">
+                <button id="btn-clear" class="btn-action btn-glass-red">Clear</button>
+                <button id="btn-save" class="btn-action btn-glass-green">Grow!</button>
+                <button id="btn-cancel" class="btn-action btn-glass-gray">Cancel</button>
             </div>
         </div>
     </div>
