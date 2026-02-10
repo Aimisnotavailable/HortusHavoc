@@ -62,9 +62,8 @@ def load_plants():
             with open(STATS_FILE, 'r') as f:
                 global GLOBAL_STATS
                 GLOBAL_STATS = json.load(f)
-                print(f"Loaded stats: {GLOBAL_STATS}")
         except:
-            GLOBAL_STATS = {"deaths": 0}
+            GLOBAL_STATS = {"deaths": 20}
             
 def save_plants():
     try:
