@@ -35,7 +35,7 @@ WEATHER_TYPES = [
 ]
 current_weather = "sunny"
 last_weather_change = 0
-WEATHER_DURATION_SEC = 60
+WEATHER_DURATION_SEC = 600
 
 # --- GLOBAL ENVIRONMENT STATE ---
 env_state = {
@@ -62,6 +62,7 @@ def load_plants():
             with open(STATS_FILE, 'r') as f:
                 global GLOBAL_STATS
                 GLOBAL_STATS = json.load(f)
+                print(f"Loaded stats: {GLOBAL_STATS}")
         except:
             GLOBAL_STATS = {"deaths": 0}
             
@@ -82,7 +83,7 @@ def save_stats():
 
 
 # GLOBAL_PLANTS = load_plants()
-print(f"Server loaded {len(GLOBAL_PLANTS)} plants from {DB_FILE}")
+# print(f"Server loaded {len(GLOBAL_PLANTS)} plants from {DB_FILE}")
 
 def update_weather_logic():
     global current_weather, last_weather_change, env_state
@@ -109,7 +110,7 @@ def update_weather_logic():
         env_state["snow_level"] = max(0.0, env_state["snow_level"] - 0.0002) # Slow melt
 
     # 3. Puddle Logic (FIXED)
-    if "rain" in w or "storm" in w:
+    if w == "storm" or w == "rain":
         rate = 0.005 if "storm" in w else 0.001
         env_state["puddle_level"] = min(1.0, env_state["puddle_level"] + rate)
         # Rain melts snow fast
@@ -227,6 +228,8 @@ def plant_seed():
     new_id = NEXT_PLANT_ID
     NEXT_PLANT_ID += 1
     
+    max_hp = int(random.uniform(80.0, 300.0))
+    vit = round(random.uniform(0.5, 5.0), 2)
     new_plant = {
         "id": new_id,
         "x": data.get('x', 0),
@@ -235,9 +238,10 @@ def plant_seed():
         "leafTex": data.get('leafTex', ''),
         "flowerTex": data.get('flowerTex', ''),
         "author": data.get('author', 'Anonymous'),
-        "stats": {"hp": 100.0, "maxHp": 100.0, "vit": 1.0, "dead": False}, # Init stats immediately
-        "server_time": time.time() * 1000
+        "stats": {"hp": max_hp, "maxHp": max_hp, "vit": vit, "dead": False}, # Init stats immediately
+        "server_time": data.get('timestamp')
     }
+
     GLOBAL_PLANTS.append(new_plant)
     save_plants()
     return jsonify(new_plant)

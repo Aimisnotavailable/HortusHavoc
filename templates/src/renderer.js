@@ -212,7 +212,20 @@ function updateTooltip() {
         document.getElementById('tooltip-author').innerText = p.author;
         document.getElementById('tooltip-hp').innerText = `${Math.floor(stats.hp)} / ${stats.maxHp}`;
         document.getElementById('tooltip-vit').innerText = stats.vit;
-        
+
+        const ageEl = document.getElementById('tooltip-age');
+        if(ageEl) {
+            ageEl.innerText = formatAge(p.server_time);
+        }
+
+        const FullyGrown = document.getElementById('tooltip-growth-status');
+
+        if (FullyGrown) {
+            const growthDuration = CONFIG.GROWTH_DURATION || 5000;
+            const age = Date.now() - p.server_time;
+            FullyGrown.innerText = age >= growthDuration ? "Fully Grown" : "Growing";
+        }
+
         tooltip.style.display = 'block';
         tooltip.style.left = (STATE.mouse.x + 15) + 'px';
         tooltip.style.top = (STATE.mouse.y + 15) + 'px';
@@ -807,4 +820,29 @@ function getImage(src) {
     img.src = src;
     imageCache[src] = img;
     return img;
+}
+
+// --- NEW AGE FORMATTER ---
+function formatAge(timestamp) {
+    if (!timestamp) return "Age: Just now";
+    
+    const diff = Math.max(0, Date.now() - timestamp);
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (seconds < 60) {
+        return `${seconds} secs`;
+    } 
+    else if (minutes < 60) {
+        return `${minutes} mins ${seconds % 60} secs`;
+    } 
+    else if (hours < 24) {
+        return `${hours} hours ${minutes % 60} mins`;
+    } 
+    else {
+        // "if days it should only be hours and minutes" -> assuming Days + Hours pattern
+        return `${days} days ${hours % 24} hours`;
+    }
 }

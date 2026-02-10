@@ -1,10 +1,10 @@
 export class AudioManager {
     constructor() {
         this.enabled = false;
+        this.isMuted = false; // TRACK MUTE STATE
         this.sounds = {};
         
         // Procedural Audio Context
-        // We use a safe check because some browsers complain if created too early
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
 
         this.sources = {
@@ -20,33 +20,72 @@ export class AudioManager {
         if(this.enabled) return;
         this.enabled = true;
         
-        // 1. Wake up the Audio Engine (Browsers sleep it until a user clicks)
+        // 1. Wake up the Audio Engine
         if (this.ctx.state === 'suspended') {
             this.ctx.resume();
         }
 
         console.log("🔊 Audio System Initialized");
 
-        // Start ambient MP3s (these require files)
+        // Start ambient MP3s
         for (const [key, path] of Object.entries(this.sources)) {
             const audio = new Audio(path);
             audio.loop = true;
             audio.volume = 0; 
+            // Apply initial mute state in case user muted before init
+            audio.muted = this.isMuted; 
             this.sounds[key] = audio;
+            
             audio.play().catch(e => {
-                // It's normal for this to fail if user hasn't clicked yet
                 console.log("Waiting for interaction to play ambience...");
             });
         }
     }
 
+    // --- NEW MUTE CONTROLS ---
+    mute() {
+        this.isMuted = true;
+        
+        // 1. Stop procedural sounds (Oscillators/Noise)
+        if(this.ctx.state === 'running') this.ctx.suspend();
+
+        // 2. Mute all ambient MP3s
+        Object.values(this.sounds).forEach(audio => {
+            audio.muted = true;
+        });
+        
+        console.log("🔇 System Muted");
+    }
+
+    unmute() {
+        this.isMuted = false;
+
+        // 1. Resume procedural sounds
+        if(this.ctx.state === 'suspended') this.ctx.resume();
+
+        // 2. Unmute all ambient MP3s
+        Object.values(this.sounds).forEach(audio => {
+            audio.muted = false;
+        });
+
+        console.log("🔊 System Unmuted");
+    }
+
+    toggleMute() {
+        if (this.isMuted) this.unmute();
+        else this.mute();
+        return this.isMuted;
+    }
+
     // --- COMPATIBILITY FIX ---
-    // This allows AUDIO.play('protect') to work
     play(type) {
         this.playEffect(type);
     }
 
     playEffect(type) {
+        // If muted, do nothing
+        if (this.isMuted) return;
+
         // Always try to wake up the engine first
         if (this.ctx.state === 'suspended') this.ctx.resume();
 
@@ -60,8 +99,8 @@ export class AudioManager {
         const gain = this.ctx.createGain();
         
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(440, t); // A4
-        osc.frequency.exponentialRampToValueAtTime(880, t + 0.1); // Slide up to A5
+        osc.frequency.setValueAtTime(440, t); 
+        osc.frequency.exponentialRampToValueAtTime(880, t + 0.1); 
         
         gain.gain.setValueAtTime(0.1, t);
         gain.gain.exponentialRampToValueAtTime(0.001, t + 1.5); 
@@ -90,7 +129,7 @@ export class AudioManager {
         const noise = this.ctx.createBufferSource();
         noise.buffer = buffer;
 
-        // Filter Sweep (The "Crumble" sound)
+        // Filter Sweep
         const filter = this.ctx.createBiquadFilter();
         filter.type = 'lowpass';
         filter.frequency.setValueAtTime(800, t); 
@@ -108,9 +147,12 @@ export class AudioManager {
 
     update(weatherType, isNight) {
         if(!this.enabled) return;
+        
+        // Even if we are calculating volumes, the .muted property 
+        // on the audio elements will prevent sound output if isMuted is true.
 
         let targetRain = 0;
-        let targetWind = 0.3; // Base wind volume increased (was 0.1)
+        let targetWind = 0.3; 
         let targetCrickets = 0;
         let targetStorm = 0;
 
@@ -119,16 +161,16 @@ export class AudioManager {
             targetRain = 0.5;
             targetWind = 0.4;
         } 
-        else if (weatherType.includes('storm') || weatherType.includes('thunder')) {
+        else if ((weatherType.includes('storm') || weatherType.includes('thunder')) && ! weatherType.includes('dust')) {
             targetRain = 0.6;
             targetStorm = 0.6;
             targetWind = 0.6;
         } 
         else if (weatherType.includes('breeze') || weatherType.includes('cloudy')) {
-            targetWind = 0.5; // Louder for breeze
+            targetWind = 0.5; 
         }
         else if (weatherType.includes('gale') || weatherType.includes('hurricane') || weatherType.includes('tornado')) {
-            targetWind = 1.0; // Max volume
+            targetWind = 1.0; 
             targetRain = 0.3;
         }
         else if (weatherType.includes('blizzard')) {
@@ -161,8 +203,4 @@ export class AudioManager {
     }
 }
 
-// Helper for pink noise generation
-let lastOut = 0;
-
-// Export Singleton for easy access in network.js
 export const AUDIO = new AudioManager();

@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Draw A Garden</title>
     <link rel="stylesheet" href="src/styles.css">
+    <link rel="icon" href="./templates/src/assets/favicon.png" sizes="32x32" type="image/png">
     <style>
-        /* CRITICAL: Ensure the game takes full screen */
         html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #000; }
         #game-container { position: relative; width: 100%; height: 100%; }
         canvas { display: block; width: 100%; height: 100%; } 
@@ -19,10 +19,12 @@
 
         <div id="plant-tooltip" style="display: none; position: absolute; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 5px; border: 1px solid #4caf50; pointer-events: none; z-index: 100;">
             <div id="tooltip-author" style="font-weight: bold; color: #4caf50;"></div>
-            <div style="font-size: 12px;">HP: <span id="tooltip-hp"></span></div>
-            <div style="font-size: 12px;">VIT: <span id="tooltip-vit"></span></div>
+            <div style="font-size: 12px;">Hp: <span id="tooltip-hp"></span></div>
+            <div style="font-size: 12px;">Vitality: <span id="tooltip-vit"></span></div>
+            <div style="font-size: 12px;">Age: <span id="tooltip-age"></span></div>
+            <div style="font-size: 12px;">Growth Status: <span id="tooltip-growth-status"></span></div>
         </div>
-        
+
         <div id="ui-layer">
             
             <div class="hud-bar">
@@ -35,59 +37,59 @@
                 </div>
 
                 <div class="glass-panel">
-                    <div class="stat-item" title="Wind">
+                    <div class="stat-item" title="Wind Speed">
                         <span class="icon">💨</span> <span id="ui-wind-speed">0</span>
                         <span id="ui-wind-arrow" style="display:inline-block; transition: transform 0.5s;">➡</span>
                     </div>
                 </div>
+
                 <div class="glass-panel stats row">
-                    <div class="stat-item" title="Light">
+                    <div class="stat-item" title="Light Beams">
                         <span class="icon">✨</span><span id="ui-beams">0%</span>
                     </div>
                     <div class="stat-item" title="Snow">
                         <span class="icon">❄️</span> <span id="ui-snow">0%</span>
                     </div>
-                    <div class="stat-item" title="Rain">
+                    <div class="stat-item" title="Puddles">
                         <span class="icon">💧</span> <span id="ui-puddle">0%</span>
                     </div>
                 </div>
 
                 <div class="glass-panel life-pill">
-                    <div class="stat-item" title="Plants">
+                    <div class="stat-item" title="Alive Plants">
                         <span class="icon">🌱</span> <span id="ui-plant-count">0</span>
                     </div>
                 </div>
 
                 <div class="glass-panel death-pill">
-                    <span class="icon">💀</span>
+                    <span class="icon" title="Dead Plants">💀</span>
                     <span id="ui-death-count">0</span>
                 </div>
             </div>
 
-            <div id="tooltip" class="glass-tooltip" style="display: none;"></div>
+            <div class="bottom-controls">
+                <button id="btn-sound" class="glass-btn-circle" title="Toggle Sound">🔊</button>
+                <button id="btn-about" class="glass-btn-circle" title="About">?</button>
+            </div>
         </div>
 
-        <div id="editor-modal">
+        <div id="editor-modal" class="glass-modal-container">
             <div class="editor-header">
-                <h2>Book of Plant</h2>
+                <h2>Plant Lab</h2>
             </div>
-
             <div class="input-group">
-                <input type="text" id="username" placeholder="Gardener Name..." maxlength="12">
+                <input type="text" id="username" placeholder="NAME YOUR GARDENER" maxlength="15">
             </div>
-
+            <div class="layer-controls">
+                <button id="btn-layer-stem" class="btn-layer active" title="Stem">🎋</button>
+                <button id="btn-layer-leaves" class="btn-layer" title="Leaves">🍃</button>
+                <button id="btn-layer-flower" class="btn-layer" title="Flower">🌺</button>
+            </div>
             <div class="canvas-stack-container">
                 <canvas id="canvas-stem" class="layer-canvas active" width="200" height="400"></canvas>
                 <canvas id="canvas-leaves" class="layer-canvas inactive" width="200" height="400"></canvas>
                 <canvas id="canvas-flower" class="layer-canvas inactive" width="200" height="400"></canvas>
             </div>
-
-            <div class="layer-controls">
-                <button id="btn-layer-stem" class="btn-layer active" title="Stem"><span>🎋</span></button>
-                <button id="btn-layer-leaves" class="btn-layer" title="Leaves"><span>🍃</span></button>
-                <button id="btn-layer-flower" class="btn-layer" title="Flower"><span>🌺</span></button>
-            </div>
-
             <div class="editor-tools">
                 <div class="tool-row">
                     <label>Color</label>
@@ -98,15 +100,99 @@
                     <input type="range" id="editor-size" min="2" max="40" value="10">
                 </div>
             </div>
-
             <div class="editor-actions">
                 <button id="btn-clear" class="btn-action btn-glass-red">Clear</button>
                 <button id="btn-save" class="btn-action btn-glass-green">Grow!</button>
-                <button id="btn-cancel" class="btn-action btn-glass-gray">Cancel</button>
+                <button id="btn-cancel" class="btn-action">Cancel</button>
             </div>
         </div>
+
+        <div id="about-modal" class="glass-modal-container">
+            <div class="editor-header">
+                <h2>The Global Garden</h2>
+            </div>
+            
+            <div style="text-align: left; padding: 0 15px; opacity: 0.9; font-weight: 300; line-height: 1.6;">
+                <p>
+                    <strong style="color: #4caf50;">CREATE.</strong> 
+                    Draw a unique plant to add life to the world. Your creation remains here for others to see.
+                </p>
+                <p>
+                    <strong style="color: #64b5f6;">NURTURE.</strong>
+                    The weather is harsh. <strong>Click on any plant</strong>—yours or a stranger's—to shield it from the storm. You are the guardian of this ecosystem.
+                </p>
+                <p>
+                    <strong style="color: #ffb74d;">WITNESS.</strong>
+                    Experience a living atmosphere. From gentle breezes to rare auroras, the environment reacts to the community.
+                </p>
+            </div>
+
+            <div style="text-align: center; margin: 30px 0 20px 0; font-size: 28px; letter-spacing: 15px; opacity: 0.8; filter: drop-shadow(0 0 8px rgba(255,255,255,0.3));">
+                🌱🛡️⛈️
+            </div>
+
+            <p style="font-size: 11px; opacity: 0.4; text-align: center; letter-spacing: 1px; text-transform: uppercase;">
+                Current Version: Alpha 1.0 <br>
+                Status: Waiting for Guardians
+            </p>
+
+            <div class="editor-actions">
+                <button id="btn-close-about" class="btn-action">Enter the Garden</button>
+            </div>
+        </div>
+
     </div>
 
     <script type="module" src="src/main.js"></script>
+
+    <script type="module">
+        import { AUDIO } from './src/audio.js';
+
+        // --- Sound Toggle ---
+        const btnSound = document.getElementById('btn-sound');
+        let isMuted = true;
+
+        btnSound.addEventListener('click', () => {
+            isMuted = !isMuted;
+            btnSound.innerHTML = isMuted ? '🔇' : '🔊';
+
+            // Check what methods your AUDIO object has
+            if (AUDIO) {
+                if (typeof AUDIO.mute === 'function') {
+                    // Method A: Dedicated mute function
+                    isMuted ? AUDIO.mute() : AUDIO.unmute();
+                } else if (typeof AUDIO.setVolume === 'function') {
+                    // Method B: Set volume to 0
+                    AUDIO.setVolume(isMuted ? 0 : 0.5);
+                } else if (AUDIO.ctx && typeof AUDIO.ctx.suspend === 'function') {
+                    // Method C: Raw Audio Context (Suspend/Resume)
+                    isMuted ? AUDIO.ctx.suspend() : AUDIO.ctx.resume();
+                } else {
+                    console.log("Audio object found, but no mute method detected.");
+                }
+            } else {
+                console.error("AUDIO module not found.");
+            }
+        });
+
+        // --- About Modal ---
+        const btnAbout = document.getElementById('btn-about');
+        const aboutModal = document.getElementById('about-modal');
+        const btnCloseAbout = document.getElementById('btn-close-about');
+
+        btnAbout.addEventListener('click', () => {
+            aboutModal.style.display = 'block';
+        });
+
+        btnCloseAbout.addEventListener('click', () => {
+            aboutModal.style.display = 'none';
+        });
+        
+        window.addEventListener('click', (e) => {
+            if (e.target === aboutModal) {
+                aboutModal.style.display = 'none';
+            }
+        });
+    </script>
 </body>
 </html>

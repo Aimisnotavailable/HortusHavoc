@@ -4,7 +4,7 @@ export const CONFIG = {
     GRASS_COUNT: 8000,
     CANVAS_SIZE: 200,
     GAME_TIME_SCALE: 10, 
-    GROWTH_DURATION: 5000,
+    GROWTH_DURATION: 30000, 
     
     // Plant Stats
     BASE_HP: 100,
