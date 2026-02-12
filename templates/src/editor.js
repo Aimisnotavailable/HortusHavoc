@@ -25,10 +25,16 @@ export function initEditor() {
             layers[key].ctx = c.getContext('2d', { willReadFrequently: true });
             layers[key].btn = b;
 
+            // --- MOUSE EVENTS ---
             c.addEventListener('mousedown', (e) => startStroke(e, key));
             c.addEventListener('mousemove', (e) => drawStroke(e, key));
             c.addEventListener('mouseup', endStroke);
             c.addEventListener('mouseout', endStroke);
+
+            // --- TOUCH EVENTS (NEW) ---
+            c.addEventListener('touchstart', (e) => { e.preventDefault(); startStroke(e, key); }, { passive: false });
+            c.addEventListener('touchmove', (e) => { e.preventDefault(); drawStroke(e, key); }, { passive: false });
+            c.addEventListener('touchend', (e) => { e.preventDefault(); endStroke(); });
             
             b.addEventListener('click', () => switchLayer(key));
         }
@@ -42,7 +48,7 @@ export function initEditor() {
         colorInput.addEventListener('input', (e) => {
             const val = e.target.value;
             layers[activeLayer].color = val;
-            updateSliderColor(val); // <--- SYNC COLOR
+            updateSliderColor(val);
         });
     }
 
@@ -58,9 +64,32 @@ export function initEditor() {
     document.getElementById('btn-clear')?.addEventListener('click', clearCurrentLayer);
 }
 
-// --- NEW FUNCTION: Updates CSS Variable for Slider ---
 function updateSliderColor(color) {
     document.documentElement.style.setProperty('--thumb-color', color);
+}
+
+// --- HELPER: Get X/Y from Mouse OR Touch ---
+function getPointerPos(e, canvas) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    
+    let clientX, clientY;
+
+    if (e.touches && e.touches.length > 0) {
+        // Touch Event
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+    } else {
+        // Mouse Event
+        clientX = e.clientX;
+        clientY = e.clientY;
+    }
+
+    return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
+    };
 }
 
 export function openEditor(x, y) {
@@ -81,14 +110,12 @@ function switchLayer(key) {
     const colorInput = document.getElementById('editor-color');
     const sizeInput = document.getElementById('editor-size');
     
-    // Sync UI
     if(colorInput) {
         colorInput.value = layers[key].color;
-        updateSliderColor(layers[key].color); // <--- SYNC COLOR
+        updateSliderColor(layers[key].color);
     }
     if(sizeInput) sizeInput.value = layers[key].size;
 
-    // Toggle Styles
     Object.keys(layers).forEach(k => {
         const item = layers[k];
         if (k === key) {
@@ -116,21 +143,20 @@ function endStroke() {
 
 function drawStroke(e, key) {
     if (!isDrawing || key !== activeLayer) return;
+    
     const l = layers[key];
-    const rect = l.canvas.getBoundingClientRect();
-    const scaleX = l.canvas.width / rect.width;
-    const scaleY = l.canvas.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    const pos = getPointerPos(e, l.canvas); // Use the helper
 
     l.ctx.lineWidth = l.size; 
     l.ctx.strokeStyle = l.color;
     l.ctx.lineCap = 'round';
     l.ctx.lineJoin = 'round';
-    l.ctx.lineTo(x, y);
+    
+    l.ctx.lineTo(pos.x, pos.y);
     l.ctx.stroke();
+    
     l.ctx.beginPath();
-    l.ctx.moveTo(x, y);
+    l.ctx.moveTo(pos.x, pos.y);
 }
 
 function clearCurrentLayer() {
