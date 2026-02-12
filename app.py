@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request, send_from_directory, render_template
 from flask_cors import CORS
+from pathlib import Path
 import time
 import random
 import json
@@ -16,8 +17,8 @@ app = Flask(__name__, static_folder=TARGET_FOLDER, template_folder=TARGET_FOLDER
 CORS(app)
 
 # --- STATE ---
-DB_FILE = 'global_plants.json'
-STATS_FILE = 'server_stats.json' # NEW FILE for counters
+DB_FILE = Path(f'{os.getcwd()}/global_plants.json') # Moved to root for easier access
+STATS_FILE = Path(f'{os.getcwd()}/server_stats.json') # NEW FILE for counters
 
 GLOBAL_PLANTS = []
 GLOBAL_STATS = {"deaths": 0} # NEW DICT to hold stats
