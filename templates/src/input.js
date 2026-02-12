@@ -4,67 +4,94 @@ import { protectPlant } from './network.js';
 import { AUDIO } from './audio.js';          
 
 let lastShieldTime = 0; 
+let isDragging = false;
+let startX = 0;
+let lastCameraX = 0;
+const TAP_THRESHOLD = 10; 
 
 export function initInput() {
     console.log("[System] Initializing Input...");
-
-    // 1. Track Mouse (Keep this for visuals/tooltips)
+    
+    // 1. Desktop Mouse Tracking
     window.addEventListener('mousemove', (e) => {
         STATE.mouse.x = e.clientX;
         STATE.mouse.y = e.clientY;
     });
 
-    // 2. Handle Mouse Clicks
+    // 2. Desktop Click
     window.addEventListener('mousedown', (e) => {
         if (e.target.id !== 'gameCanvas') return;
-        handleInteract(e.clientX, e.clientY);
+        const worldX = e.clientX + (STATE.camera ? STATE.camera.x : 0);
+        handleInteract(worldX, e.clientY);
     });
 
-    // 3. Handle Touch Taps (Mobile)
+    // 3. Mobile Touch (Drag & Tap)
     window.addEventListener('touchstart', (e) => {
         if (e.target.id !== 'gameCanvas') return;
+        if(e.cancelable) e.preventDefault();
         
-        // Prevent default to stop scrolling AND prevent "ghost" mouse clicks
-        e.preventDefault(); 
-        
-        // Use the first touch point
         const touch = e.touches[0];
-        if(touch) {
-            handleInteract(touch.clientX, touch.clientY);
+        startX = touch.clientX;
+        lastCameraX = STATE.camera ? STATE.camera.x : 0;
+        isDragging = false;
+        
+        STATE.mouse.x = touch.clientX;
+        STATE.mouse.y = touch.clientY;
+    }, { passive: false });
+
+    window.addEventListener('touchmove', (e) => {
+        if (e.target.id !== 'gameCanvas') return;
+        if(e.cancelable) e.preventDefault();
+        
+        const touch = e.touches[0];
+        const dx = startX - touch.clientX; 
+        
+        if (Math.abs(dx) > TAP_THRESHOLD) {
+            isDragging = true;
+            if (STATE.camera) {
+                STATE.camera.x = lastCameraX + dx;
+                // Clamp
+                const WORLD_WIDTH = 4000;
+                const viewW = window.innerWidth;
+                if (STATE.camera.x < 0) STATE.camera.x = 0;
+                if (STATE.camera.x > WORLD_WIDTH - viewW) STATE.camera.x = WORLD_WIDTH - viewW;
+            }
         }
     }, { passive: false });
+
+    window.addEventListener('touchend', (e) => {
+        if (e.target.id !== 'gameCanvas') return;
+        if (!isDragging) {
+            const worldX = STATE.mouse.x + (STATE.camera ? STATE.camera.x : 0);
+            handleInteract(worldX, STATE.mouse.y);
+        }
+        isDragging = false;
+    });
 }
 
-// --- SHARED LOGIC FOR MOUSE & TOUCH ---
-function handleInteract(inputX, inputY) {
-    // A. Check Hitbox
-    // Find a plant that is close to the input
-    // Box: 60px wide (30px L/R), 180px tall (from base upwards)
+function handleInteract(worldX, worldY) {
     const clickedPlant = STATE.plants.find(p => {
-        const dx = Math.abs(p.x - inputX);
-        const dy = p.y - inputY; // positive means click is ABOVE base
-        
-        // Check: Within 40px left/right AND between 0px and 200px up
+        const dx = Math.abs(p.x - worldX);
+        const dy = p.y - worldY; 
         return (dx < 40 && dy > 0 && dy < 200);
     });
 
     if (clickedPlant) {
-        // B. Cooldown Check (2 Seconds)
-        const now = Date.now();
-        if (now - lastShieldTime < 2000) { 
-            console.log("⏳ Shield recharging...");
-            return; 
+        // Mobile Logic: Tap once to see tooltip, twice to protect
+        const isMobile = ('ontouchstart' in window);
+        if (isMobile && STATE.hoveredPlant !== clickedPlant) {
+            STATE.hoveredPlant = clickedPlant;
+            return;
         }
+
+        const now = Date.now();
+        if (now - lastShieldTime < 2000) return; 
         
-        // C. Protect Action
-        console.log(`🛡️ Protecting Plant ${clickedPlant.id}`);
         protectPlant(clickedPlant.id); 
         AUDIO.play('protect');               
         lastShieldTime = now;
-        
-        return; // STOP here. Do not open editor.
+        return; 
     }
 
-    // D. If Missed Plant -> Open Editor
-    openEditor(inputX, inputY);
+    openEditor(worldX, worldY);
 }

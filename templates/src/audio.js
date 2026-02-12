@@ -1,206 +1,131 @@
-export class AudioManager {
-    constructor() {
-        this.enabled = false;
-        this.isMuted = false; // TRACK MUTE STATE
-        this.sounds = {};
-        
-        // Procedural Audio Context
-        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+export const AUDIO = {
+    ctx: null,
+    masterGain: null,
+    ambience: {}, 
+    enabled: false,
+    isMuted: false,
+    
+    sources: {
+        'rain': 'sounds/rain.mp3',
+        'wind': 'sounds/wind.mp3',
+        'crickets': 'sounds/crickets.mp3',
+    },
 
-        this.sources = {
-            'rain': 'sounds/rain.mp3',
-            'wind': 'sounds/wind.mp3',
-            'crickets': 'sounds/crickets.mp3',
-            'storm': 'sounds/storm.mp3',
-            'fire': 'sounds/fire.mp3'
-        };
-    }
-
+    // 1. Setup (Safe to run on load)
     init() {
-        if(this.enabled) return;
-        this.enabled = true;
-        
-        // 1. Wake up the Audio Engine
-        if (this.ctx.state === 'suspended') {
-            this.ctx.resume();
-        }
+        console.log("🔊 Audio System Configured (Waiting for Start...)");
+    },
 
-        console.log("🔊 Audio System Initialized");
+    // 2. Unlock (Called ONLY from the Start Button)
+    unlock() {
+        if (this.enabled) return;
 
-        // Start ambient MP3s
-        for (const [key, path] of Object.entries(this.sources)) {
-            const audio = new Audio(path);
-            audio.loop = true;
-            audio.volume = 0; 
-            // Apply initial mute state in case user muted before init
-            audio.muted = this.isMuted; 
-            this.sounds[key] = audio;
+        try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioContext();
             
-            audio.play().catch(e => {
-                console.log("Waiting for interaction to play ambience...");
+            this.masterGain = this.ctx.createGain();
+            this.masterGain.gain.value = 0.5;
+            this.masterGain.connect(this.ctx.destination);
+
+            // Create and Play immediately
+            Object.entries(this.sources).forEach(([key, url]) => {
+                const audio = new Audio(url);
+                audio.loop = true;
+                audio.volume = 0; 
+                this.ambience[key] = audio;
+                
+                // This will work because we are inside the 'click' event stack
+                const p = audio.play();
+                if(p) p.catch(e => console.warn(`Audio issue with ${key}:`, e));
             });
+
+            if (this.ctx.state === 'suspended') {
+                this.ctx.resume();
+            }
+
+            this.enabled = true;
+            console.log("🔊 Audio Context Unlocked!");
+
+        } catch (e) {
+            console.error("Audio unlock failed:", e);
         }
-    }
+    },
 
-    // --- NEW MUTE CONTROLS ---
-    mute() {
-        this.isMuted = true;
-        
-        // 1. Stop procedural sounds (Oscillators/Noise)
-        if(this.ctx.state === 'running') this.ctx.suspend();
-
-        // 2. Mute all ambient MP3s
-        Object.values(this.sounds).forEach(audio => {
-            audio.muted = true;
-        });
-        
-        console.log("🔇 System Muted");
-    }
-
-    unmute() {
-        this.isMuted = false;
-
-        // 1. Resume procedural sounds
-        if(this.ctx.state === 'suspended') this.ctx.resume();
-
-        // 2. Unmute all ambient MP3s
-        Object.values(this.sounds).forEach(audio => {
-            audio.muted = false;
-        });
-
-        console.log("🔊 System Unmuted");
-    }
-
-    toggleMute() {
-        if (this.isMuted) this.unmute();
-        else this.mute();
-        return this.isMuted;
-    }
-
-    // --- COMPATIBILITY FIX ---
-    play(type) {
-        this.playEffect(type);
-    }
-
-    playEffect(type) {
-        // If muted, do nothing
-        if (this.isMuted) return;
-
-        // Always try to wake up the engine first
+    play(soundName) {
+        if (!this.ctx || this.isMuted || !this.enabled) return;
         if (this.ctx.state === 'suspended') this.ctx.resume();
 
-        if (type === 'protect') this.playChime();
-        if (type === 'shatter') this.playWither();
-    }
-
-    playChime() {
         const t = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(440, t); 
-        osc.frequency.exponentialRampToValueAtTime(880, t + 0.1); 
-        
-        gain.gain.setValueAtTime(0.1, t);
-        gain.gain.exponentialRampToValueAtTime(0.001, t + 1.5); 
-
         osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.start();
-        osc.stop(t + 1.5);
-    }
+        gain.connect(this.masterGain);
 
-    playWither() {
-        const t = this.ctx.currentTime;
-        const bufferSize = this.ctx.sampleRate * 0.5; 
-        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        
-        // Pink Noise Generator
-        let lastOut = 0;
-        for (let i = 0; i < bufferSize; i++) {
-            const white = Math.random() * 2 - 1;
-            data[i] = (lastOut + (0.02 * white)) / 1.02;
-            lastOut = data[i];
-            data[i] *= 3.5; 
+        if (soundName === 'protect') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(400, t);
+            osc.frequency.exponentialRampToValueAtTime(800, t + 0.1);
+            osc.frequency.exponentialRampToValueAtTime(300, t + 0.6); 
+            
+            gain.gain.setValueAtTime(0.3, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.6); 
+            
+            osc.start(t);
+            osc.stop(t + 0.6);
+        } 
+        else if (soundName === 'wither') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(100, t);
+            osc.frequency.linearRampToValueAtTime(50, t + 0.8);
+            
+            gain.gain.setValueAtTime(0.2, t);
+            gain.gain.linearRampToValueAtTime(0.001, t + 0.8);
+            
+            osc.start(t);
+            osc.stop(t + 0.8);
         }
-
-        const noise = this.ctx.createBufferSource();
-        noise.buffer = buffer;
-
-        // Filter Sweep
-        const filter = this.ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(800, t); 
-        filter.frequency.exponentialRampToValueAtTime(100, t + 0.4); 
-
-        const gain = this.ctx.createGain();
-        gain.gain.setValueAtTime(0.3, t);
-        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
-
-        noise.connect(filter);
-        filter.connect(gain);
-        gain.connect(this.ctx.destination);
-        noise.start();
-    }
+    },
 
     update(weatherType, isNight) {
-        if(!this.enabled) return;
-        
-        // Even if we are calculating volumes, the .muted property 
-        // on the audio elements will prevent sound output if isMuted is true.
+        if (!this.enabled || this.isMuted) return;
 
-        let targetRain = 0;
-        let targetWind = 0.3; 
-        let targetCrickets = 0;
-        let targetStorm = 0;
+        let targetRain = 0, targetWind = 0, targetCrickets = 0, targetStorm = 0;
 
-        // WEATHER LOGIC
-        if (weatherType.includes('rain')) {
-            targetRain = 0.5;
-            targetWind = 0.4;
-        } 
-        else if ((weatherType.includes('storm') || weatherType.includes('thunder')) && ! weatherType.includes('dust')) {
-            targetRain = 0.6;
-            targetStorm = 0.6;
-            targetWind = 0.6;
-        } 
-        else if (weatherType.includes('breeze') || weatherType.includes('cloudy')) {
-            targetWind = 0.5; 
-        }
-        else if (weatherType.includes('gale') || weatherType.includes('hurricane') || weatherType.includes('tornado')) {
-            targetWind = 1.0; 
-            targetRain = 0.3;
-        }
-        else if (weatherType.includes('blizzard')) {
-            targetWind = 0.8;
-        }
+        if (weatherType.includes('rain')) { targetRain = 0.6; }
+        if (weatherType.includes('storm')) { targetRain = 0.5; targetStorm = 0.6; targetWind = 0.4; }
+        if (weatherType.includes('breeze') || weatherType.includes('cloudy')) { targetWind = 0.3; }
+        if (weatherType.includes('gale')) { targetWind = 0.8; }
+        if (isNight && !weatherType.includes('storm')) { targetCrickets = 0.3; }
 
-        // NIGHT LOGIC
-        if (isNight && !weatherType.includes('storm') && !weatherType.includes('rain') && !weatherType.includes('snow')) {
-            targetCrickets = 0.4;
-        }
+        this.fadeTo('rain', targetRain);
+        this.fadeTo('wind', targetWind);
+        this.fadeTo('crickets', targetCrickets);
+        this.fadeTo('storm', targetStorm);
+    },
 
-        this.fadeTo(this.sounds['rain'], targetRain);
-        this.fadeTo(this.sounds['wind'], targetWind);
-        this.fadeTo(this.sounds['crickets'], targetCrickets);
-        this.fadeTo(this.sounds['storm'], targetStorm);
-        this.fadeTo(this.sounds['fire'], 0);
-    }
-
-    fadeTo(audio, targetVol) {
-        if (!audio) return;
-        const speed = 0.02;
-        const current = audio.volume;
-        if (Math.abs(current - targetVol) < speed) {
-            audio.volume = targetVol;
-        } else if (current < targetVol) {
-            audio.volume = Math.min(1, current + speed);
+    fadeTo(key, targetVol) {
+        const track = this.ambience[key];
+        if (!track) return;
+        const delta = 0.02; 
+        const current = track.volume;
+        if (Math.abs(current - targetVol) > delta) {
+            track.volume = current < targetVol ? current + delta : current - delta;
         } else {
-            audio.volume = Math.max(0, current - speed);
+            track.volume = targetVol;
         }
-    }
-}
+    },
 
-export const AUDIO = new AudioManager();
+    mute() {
+        this.isMuted = true;
+        if (this.masterGain) this.masterGain.gain.value = 0;
+        Object.values(this.ambience).forEach(a => a.muted = true);
+    },
+    
+    unmute() {
+        this.isMuted = false;
+        if (this.masterGain) this.masterGain.gain.value = 0.5;
+        Object.values(this.ambience).forEach(a => a.muted = false);
+    }
+};

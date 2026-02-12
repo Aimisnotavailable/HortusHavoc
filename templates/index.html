@@ -17,182 +17,189 @@
     <div id="game-container">
         <canvas id="gameCanvas"></canvas>
 
-        <div id="plant-tooltip" style="display: none; position: absolute; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 5px; border: 1px solid #4caf50; pointer-events: none; z-index: 100;">
-            <div id="tooltip-author" style="font-weight: bold; color: #4caf50;"></div>
-            <div style="font-size: 12px;">Hp: <span id="tooltip-hp"></span></div>
-            <div style="font-size: 12px;">Vitality: <span id="tooltip-vit"></span></div>
-            <div style="font-size: 12px;">Age: <span id="tooltip-age"></span></div>
-            <div style="font-size: 12px;">Growth Status: <span id="tooltip-growth-status"></span></div>
+        <div id="welcome-modal" class="glass-modal-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; width: 100%; height: 100%; max-width: 100%; max-height: 100%; border-radius: 0; background: rgba(0,0,0,0.85); z-index: 5000;">
+            
+            <h1 style="color: white; font-weight: 300; letter-spacing: 8px; font-size: 40px; margin-bottom: 20px; text-transform: uppercase;">Draw a Garden</h1>
+            
+            <p style="color: rgba(255,255,255,0.7); margin-bottom: 50px; max-width: 400px; line-height: 1.6; font-size: 16px;">
+                Welcome to a shared digital ecosystem.<br>
+                Design unique plants, watch them grow in real-time, and protect them from dynamic weather with friends.
+            </p>
+
+            <button id="btn-start-game" class="glass-btn-circle" style="
+                width: auto; 
+                height: auto; 
+                border-radius: 50px; 
+                padding: 15px 50px; 
+                font-size: 18px; 
+                font-weight: 600; 
+                letter-spacing: 2px;
+                text-transform: uppercase;
+                background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
+                border: 1px solid rgba(255,255,255,0.3);
+            ">
+                Enter Garden
+            </button>
+
+            <p style="font-size: 12px; color: rgba(255,255,255,0.3); margin-top: 30px;">
+                Sound Enabled • Multiplayer Active
+            </p>
+        </div>
+
+        <div id="plant-tooltip" class="glass-tooltip" style="display: none;">
+            <div id="tooltip-author" style="font-weight: bold; color: #4caf50; margin-bottom: 4px;"></div>
+            <div style="display: flex; gap: 10px; font-size: 11px; color: #ccc;">
+                <span>❤️ <span id="tooltip-hp"></span></span>
+                <span>✨ <span id="tooltip-vit"></span></span>
+            </div>
+            <div id="tooltip-growth-status" style="font-size: 10px; color: #888; margin-top: 4px;"></div>
+            <div id="tooltip-age" style="font-size: 10px; color: #666; margin-top: 2px;"></div>
         </div>
 
         <div id="ui-layer">
-            
             <div class="hud-bar">
-                
                 <div class="glass-panel">
-                    <span id="ui-time-icon" class="icon">☀️</span> 
+                    <span id="ui-time-icon" style="font-size: 18px;">☀️</span>
                     <span id="ui-time-text">12:00</span>
-                    <span class="divider">|</span>
-                    <span id="ui-weather">Clear</span>
+                    <div class="divider"></div>
+                    <span id="ui-weather">Sunny</span>
                 </div>
 
-                <div class="glass-panel">
-                    <div class="stat-item" title="Wind Speed">
-                        <span class="icon">💨</span> <span id="ui-wind-speed">0</span>
-                        <span id="ui-wind-arrow" style="display:inline-block; transition: transform 0.5s;">➡</span>
+                <div class="glass-panel stats-row">
+                    <div class="stat-item" title="Plants Alive">
+                        <span class="icon">🌱</span>
+                        <span id="ui-plant-count">0</span>
                     </div>
-                </div>
-
-                <div class="glass-panel stats row">
-                    <div class="stat-item" title="Light Beams">
-                        <span class="icon">✨</span><span id="ui-beams">0%</span>
-                    </div>
-                    <div class="stat-item" title="Snow">
-                        <span class="icon">❄️</span> <span id="ui-snow">0%</span>
-                    </div>
-                    <div class="stat-item" title="Puddles">
-                        <span class="icon">💧</span> <span id="ui-puddle">0%</span>
+                    <div class="stat-item" title="Global Deaths">
+                        <span class="icon">💀</span>
+                        <span id="ui-death-count">0</span>
                     </div>
                 </div>
 
                 <div class="glass-panel life-pill">
-                    <div class="stat-item" title="Alive Plants">
-                        <span class="icon">🌱</span> <span id="ui-plant-count">0</span>
-                    </div>
+                    <span class="icon">💧</span>
+                    <span id="ui-puddle">0%</span>
+                    <div class="divider"></div>
+                    <span class="icon">❄️</span>
+                    <span id="ui-snow">0%</span>
                 </div>
 
-                <div class="glass-panel death-pill">
-                    <span class="icon" title="Dead Plants">💀</span>
-                    <span id="ui-death-count">0</span>
+                <div class="glass-panel death-pill" style="opacity: 0.8;">
+                    <span class="icon">🌪️</span>
+                    <span id="ui-wind-speed">0 km/h</span>
+                    <div id="ui-wind-arrow" style="display: inline-block; transition: transform 0.5s;">➜</div>
+                </div>
+
+                 <div class="glass-panel" style="opacity: 0.8;">
+                    <span class="icon">☀️</span>
+                    <span id="ui-beams">0%</span>
                 </div>
             </div>
 
             <div class="bottom-controls">
-                <button id="btn-sound" class="glass-btn-circle" title="Toggle Sound">🔊</button>
-                <button id="btn-about" class="glass-btn-circle" title="About">?</button>
+                <div id="btn-draw" class="glass-btn-circle" title="Plant Seed">+</div>
+                <div id="btn-about" class="glass-btn-circle" title="About">?</div>
             </div>
         </div>
-
-        <div id="editor-modal" class="glass-modal-container">
-            <div class="editor-header">
-                <h2>Plant Lab</h2>
-            </div>
-            <div class="input-group">
-                <input type="text" id="username" placeholder="NAME YOUR GARDENER" maxlength="15">
-            </div>
-            <div class="layer-controls">
-                <button id="btn-layer-stem" class="btn-layer active" title="Stem">🎋</button>
-                <button id="btn-layer-leaves" class="btn-layer" title="Leaves">🍃</button>
-                <button id="btn-layer-flower" class="btn-layer" title="Flower">🌺</button>
-            </div>
-            <div class="canvas-stack-container">
-                <canvas id="canvas-stem" class="layer-canvas active" width="200" height="400"></canvas>
-                <canvas id="canvas-leaves" class="layer-canvas inactive" width="200" height="400"></canvas>
-                <canvas id="canvas-flower" class="layer-canvas inactive" width="200" height="400"></canvas>
-            </div>
-            <div class="editor-tools">
-                <div class="tool-row">
-                    <label>Color</label>
-                    <input type="color" id="editor-color" value="#4caf50">
-                </div>
-                <div class="tool-row">
-                    <label>Size</label>
-                    <input type="range" id="editor-size" min="2" max="40" value="10">
-                </div>
-            </div>
-            <div class="editor-actions">
-                <button id="btn-clear" class="btn-action btn-glass-red">Clear</button>
-                <button id="btn-save" class="btn-action btn-glass-green">Grow!</button>
-                <button id="btn-cancel" class="btn-action">Cancel</button>
-            </div>
-        </div>
-
-        <div id="about-modal" class="glass-modal-container">
-            <div class="editor-header">
-                <h2>The Global Garden</h2>
-            </div>
-            
-            <div style="text-align: left; padding: 0 15px; opacity: 0.9; font-weight: 300; line-height: 1.6;">
-                <p>
-                    <strong style="color: #4caf50;">CREATE.</strong> 
-                    Draw a unique plant to add life to the world. Your creation remains here for others to see.
-                </p>
-                <p>
-                    <strong style="color: #64b5f6;">NURTURE.</strong>
-                    The weather is harsh. <strong>Click on any plant</strong>—yours or a stranger's—to shield it from the storm. You are the guardian of this ecosystem.
-                </p>
-                <p>
-                    <strong style="color: #ffb74d;">WITNESS.</strong>
-                    Experience a living atmosphere. From gentle breezes to rare auroras, the environment reacts to the community.
-                </p>
-            </div>
-
-            <div style="text-align: center; margin: 30px 0 20px 0; font-size: 28px; letter-spacing: 15px; opacity: 0.8; filter: drop-shadow(0 0 8px rgba(255,255,255,0.3));">
-                🌱🛡️⛈️
-            </div>
-
-            <p style="font-size: 11px; opacity: 0.4; text-align: center; letter-spacing: 1px; text-transform: uppercase;">
-                Current Version: Alpha 1.0 <br>
-                Status: Waiting for Guardians
-            </p>
-
-            <div class="editor-actions">
-                <button id="btn-close-about" class="btn-action">Enter the Garden</button>
-            </div>
-        </div>
-
     </div>
 
-    <script type="module" src="src/main.js"></script>
+    <div id="editor-modal" class="glass-modal-container">
+        <div class="editor-header">
+            <h2>New Plant</h2>
+        </div>
+        
+        <div class="input-group">
+            <input type="text" id="username" placeholder="Your Name" maxlength="12">
+        </div>
+
+        <div class="canvas-stack-container">
+            <canvas id="canvas-stem" width="200" height="400" class="layer-canvas active"></canvas>
+            <canvas id="canvas-leaves" width="200" height="400" class="layer-canvas inactive"></canvas>
+            <canvas id="canvas-flower" width="200" height="400" class="layer-canvas inactive"></canvas>
+        </div>
+
+        <div class="layer-controls">
+            <button id="btn-layer-stem" class="btn-layer active">🌿</button>
+            <button id="btn-layer-leaves" class="btn-layer">🍃</button>
+            <button id="btn-layer-flower" class="btn-layer">🌸</button>
+        </div>
+
+        <div class="editor-tools">
+            <div class="tool-row">
+                <label>Color</label>
+                <input type="color" id="editor-color" value="#4caf50">
+                <input type="range" id="editor-size" min="2" max="30" value="15">
+            </div>
+        </div>
+
+        <div class="editor-actions">
+            <button id="btn-clear" class="btn-action btn-glass-red">Clear Layer</button>
+            <button id="btn-cancel" class="btn-action">Cancel</button>
+            <button id="btn-save" class="btn-action btn-glass-green">Plant It</button>
+        </div>
+    </div>
+
+    <div id="about-modal" class="glass-modal-container">
+        <h2>About</h2>
+        <p>
+            Welcome to the community garden.<br>
+            Plants here are persistent. If you leave, they stay.<br>
+            <br>
+            <strong>Controls:</strong><br>
+            • Tap/Click empty ground to <strong>Plant</strong>.<br>
+            • Tap/Click existing plant to <strong>Protect</strong> it from storms.<br>
+            • Drag background to <strong>Explore</strong>.<br>
+        </p>
+        <div style="text-align: center;">
+            <button id="btn-close-about" class="btn-action">Close</button>
+        </div>
+    </div>
 
     <script type="module">
+        import { initRenderer } from './src/renderer.js';
+        import { initInput } from './src/input.js';
+        import { initEditor } from './src/editor.js';
+        import { pollUpdates } from './src/network.js';
         import { AUDIO } from './src/audio.js';
 
-        // --- Sound Toggle ---
-        const btnSound = document.getElementById('btn-sound');
-        let isMuted = true;
+        const modal = document.getElementById('welcome-modal');
+        const startBtn = document.getElementById('btn-start-game');
 
-        btnSound.addEventListener('click', () => {
-            isMuted = !isMuted;
-            btnSound.innerHTML = isMuted ? '🔇' : '🔊';
+        // GAME START HANDLER
+        startBtn.addEventListener('click', () => {
+            console.log("🚀 User Clicked Enter - Starting Game...");
+            
+            // 1. Unlock Audio
+            AUDIO.unlock();
 
-            // Check what methods your AUDIO object has
-            if (AUDIO) {
-                if (typeof AUDIO.mute === 'function') {
-                    // Method A: Dedicated mute function
-                    isMuted ? AUDIO.mute() : AUDIO.unmute();
-                } else if (typeof AUDIO.setVolume === 'function') {
-                    // Method B: Set volume to 0
-                    AUDIO.setVolume(isMuted ? 0 : 0.5);
-                } else if (AUDIO.ctx && typeof AUDIO.ctx.suspend === 'function') {
-                    // Method C: Raw Audio Context (Suspend/Resume)
-                    isMuted ? AUDIO.ctx.suspend() : AUDIO.ctx.resume();
-                } else {
-                    console.log("Audio object found, but no mute method detected.");
-                }
-            } else {
-                console.error("AUDIO module not found.");
-            }
+            // 2. Initialize Game Systems
+            initRenderer();
+            initInput();
+            initEditor();
+            pollUpdates();
+
+            // 3. Fade Out Modal
+            modal.style.transition = "opacity 0.5s ease";
+            modal.style.opacity = '0';
+            setTimeout(() => {
+                modal.style.display = 'none';
+            }, 500);
         });
 
-        // --- About Modal ---
+        // About Modal Handlers
         const btnAbout = document.getElementById('btn-about');
         const aboutModal = document.getElementById('about-modal');
         const btnCloseAbout = document.getElementById('btn-close-about');
 
-        btnAbout.addEventListener('click', () => {
-            aboutModal.style.display = 'block';
+        btnAbout.addEventListener('click', () => aboutModal.style.display = 'block');
+        btnCloseAbout.addEventListener('click', () => aboutModal.style.display = 'none');
+        window.addEventListener('click', (e) => {
+            if (e.target === aboutModal) aboutModal.style.display = 'none';
         });
 
-        btnCloseAbout.addEventListener('click', () => {
-            aboutModal.style.display = 'none';
-        });
-        
-        window.addEventListener('click', (e) => {
-            if (e.target === aboutModal) {
-                aboutModal.style.display = 'none';
-            }
-        });
+        // Initialize Audio Configs
+        AUDIO.init();
     </script>
+
 </body>
 </html>
