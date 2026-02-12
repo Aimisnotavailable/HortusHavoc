@@ -5,7 +5,7 @@ export const STATE = {
     lastServerTime: 0,
     mouse: { x: -100, y: -100 },
     hoveredPlant: null,
-    camera : { x: 0, y: 0},
+    camera : { x: 0, y: 0, targetX: 0},
     
     // Synced Environment State (Target values from server)
     world: {
