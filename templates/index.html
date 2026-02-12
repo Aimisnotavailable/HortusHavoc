@@ -10,6 +10,13 @@
         html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #000; }
         #game-container { position: relative; width: 100%; height: 100%; }
         canvas { display: block; width: 100%; height: 100%; touch-action: none; } /* Added touch-action: none for better mobile swipe */
+        
+        /* New Animation for the About Hint */
+        @keyframes pulse-horizontal {
+            0% { transform: translateX(0); opacity: 0.5; }
+            50% { transform: translateX(5px); opacity: 1; }
+            100% { transform: translateX(0); opacity: 0.5; }
+        }
     </style>
 </head>
 <body>
@@ -140,19 +147,33 @@
         </div>
     </div>
 
-    <div id="about-modal" class="glass-modal-container">
-        <h2>About</h2>
-        <p>
-            Welcome to the community garden.<br>
-            Plants here are persistent. If you leave, they stay.<br>
-            <br>
-            <strong>Controls:</strong><br>
-            • Tap/Click empty ground to <strong>Plant</strong>.<br>
-            • Tap/Click existing plant to <strong>Protect</strong> it from storms.<br>
-            • Drag background to <strong>Explore</strong>.<br>
-        </p>
-        <div style="text-align: center;">
-            <button id="btn-close-about" class="btn-action">Close</button>
+    <div id="about-modal" class="glass-modal-container" style="max-width: 400px; line-height: 1.6;">
+        <h2 style="text-align: center; margin-bottom: 20px; font-weight: 300; letter-spacing: 2px;">🌿 Garden Guide</h2>
+        
+        <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; margin-bottom: 20px;">
+            <p style="margin: 8px 0; display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 20px;">🌱</span> 
+                <span><strong>Plant:</strong> Tap anywhere to draw unique flora.</span>
+            </p>
+            <p style="margin: 8px 0; display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 20px;">🛡️</span> 
+                <span><strong>Protect:</strong> Tap plants to shield them from storms.</span>
+            </p>
+            <p style="margin: 8px 0; display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 20px;">🌧️</span> 
+                <span><strong>Weather:</strong> Rain helps growth, but storms can damage.</span>
+            </p>
+        </div>
+
+        <div style="text-align: center; margin-top: 30px; opacity: 0.8;">
+            <p style="font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px;">Exploration Hint</p>
+            <div style="font-size: 14px; color: #ccc; display: flex; justify-content: center; align-items: center; gap: 10px; animation: pulse-horizontal 2s infinite;">
+                <span>←</span> Drag the background to Explore <span>→</span>
+            </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 30px;">
+            <button id="btn-close-about" class="btn-action" style="min-width: 100px;">Close</button>
         </div>
     </div>
 
