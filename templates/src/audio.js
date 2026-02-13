@@ -1,3 +1,5 @@
+import { CONFIG } from "./config.js";
+
 export const AUDIO = {
     ctx: null,
     masterGain: null,
@@ -110,7 +112,8 @@ export const AUDIO = {
         if (weatherType.includes('breeze') || weatherType.includes('cloudy')) { targetWind = 0.3; }
         if (weatherType.includes('gale')) { targetWind = 0.8; }
         if (isNight && !weatherType.includes('storm')) { targetCrickets = 0.3; }
-
+        
+        targetWind = CONFIG.WEATHER_TYPES[weatherType].force || targetWind; // Override with config if specified
         // Fading
         this.fadeTo('rain', targetRain);
         this.fadeTo('wind', targetWind);
